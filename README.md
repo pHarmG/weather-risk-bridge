@@ -70,14 +70,13 @@ Skip this section if you are using [Docker instead](#docker-alternative-separate
 
 ### 1.4 Service URL for the next steps
 
-From Home Assistant Core to this app, use:
+Supervisor DNS often **does not** resolve `weather-risk-bridge`, so Core never reaches the app and the app logs stay empty.
 
-```text
-http://weather-risk-bridge:8099
-```
+Use one of these from the integration form:
 
-That hostname is the app’s DNS name on the Supervisor network. You will paste it into the integration form in Step 3 unless you chose Docker on another host.
-
+1. **Recommended same-host:** `http://HOME_ASSISTANT_HOST_IP:8099` (for this network: `http://10.0.0.149:8099`). Port `8099` is published by the app.
+2. If the integration discovers the app, it may pre-fill `http://<app-container-ip>:8099`.
+3. `http://weather-risk-bridge:8099` only if `nslookup weather-risk-bridge` works inside Home Assistant.
 ---
 
 ## Step 2 — Install the integration (HACS)
@@ -104,7 +103,7 @@ This is the step that points Weather Risk Bridge at **your** place.
 
 | Field | What to enter |
 |-------|----------------|
-| **Service URL** | App: keep `http://weather-risk-bridge:8099`. Docker on another machine: `http://THAT_HOST_LAN_IP:8099` (example `http://192.168.1.50:8099`). Do **not** use `http://localhost:8099` from Home Assistant if the service runs in a different container or on a different computer — `localhost` inside HA means HA itself, not your other host. |
+| **Service URL** | Same-host app: use `http://HOME_ASSISTANT_HOST_IP:8099` (example `http://10.0.0.149:8099`) unless Supervisor DNS resolves the app hostname. Docker on another machine: `http://THAT_HOST_LAN_IP:8099`. Do **not** use `http://localhost:8099` from Home Assistant Core. |
 | **Bearer token** | Must match the app/Docker `token` if you set one. Otherwise leave blank. |
 | **Label** | Friendly name for this place, for example `Home` or `Cabin`. This becomes the entity slug (e.g. `home` → `weather.weather_risk_bridge_home`). |
 | **Latitude** | Decimal degrees for your location (north positive). Example: `30.2672`. |

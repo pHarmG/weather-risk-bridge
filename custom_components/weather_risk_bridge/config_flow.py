@@ -17,11 +17,11 @@ from .const import (
     CONF_LONGITUDE,
     CONF_SERVICE_URL,
     CONF_WIND_THRESHOLD_MPH,
-    DEFAULT_SERVICE_URL,
     DEFAULT_WIND_THRESHOLD_MPH,
     DOMAIN,
 )
 from .helpers import entry_title_from_config, merge_entry_config
+from .discovery import async_resolve_default_service_url
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 async def _validate_input(hass, data: dict[str, Any]) -> None:
-    LOGGER.debug(
+    LOGGER.info(
         "Validating Weather Risk Bridge config for service %s",
         data[CONF_SERVICE_URL],
     )
@@ -67,7 +67,7 @@ class WeatherRiskBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         defaults = {
-            CONF_SERVICE_URL: DEFAULT_SERVICE_URL,
+            CONF_SERVICE_URL: await async_resolve_default_service_url(self.hass),
             CONF_BEARER_TOKEN: "",
             CONF_LABEL: "",
             CONF_LATITUDE: self.hass.config.latitude,

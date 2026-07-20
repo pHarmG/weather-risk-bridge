@@ -14,7 +14,9 @@ CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
 CONF_WIND_THRESHOLD_MPH = "wind_threshold_mph"
 
-# Hostname matches the Home Assistant app `hostname` / DNS name on the HA network.
+# Documented hostname when Supervisor DNS resolves the app. Same-host installs
+# should prefer discovery.py (app IP) or http://<HA-host-ip>:8099 because
+# weather-risk-bridge often does not appear in Supervisor DNS.
 DEFAULT_SERVICE_URL = "http://weather-risk-bridge:8099"
 DEFAULT_WIND_THRESHOLD_MPH = 40
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=3)
