@@ -11,7 +11,7 @@
     "step": {
       "user": {
         "title": "Weather Risk Bridge",
-        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: on Home Assistant OS this field is usually pre-filled with the local app address (http://172.30.x.x:8099). That Supervisor-network IP is correct — keep it. If empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
+        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: leave the auto-filled value when present (http://172.30.x.x:8099 on Home Assistant OS). That Supervisor app IP is correct. If the field is empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",

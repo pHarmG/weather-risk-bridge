@@ -35,7 +35,7 @@ The app does **not** store your home coordinates. Enter them in the integration:
 
 1. Install **Weather Risk Bridge** via HACS (same GitHub repository) and restart Home Assistant.
 2. **Settings → Devices & Services → Add Integration → Weather Risk Bridge**.
-3. Service URL: accept the discovered `http://172.30.x.x:8099` value, or use `http://HOME_ASSISTANT_HOST_IP:8099`.
+3. Service URL: leave the auto-filled `http://172.30.x.x:8099` value (or use `http://HOME_ASSISTANT_HOST_IP:8099` if blank).
 4. Set **Label**, **Latitude**, and **Longitude** (decimal degrees; US west longitudes are negative). Copy from **Settings → System → General**, Google Maps (right-click), or a lat/lon lookup site.
 5. Add the Lovelace card with `location:` matching your label slug (for example `home`).
 
