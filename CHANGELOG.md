@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Add HACS Action + hassfest CI; set `hacs.json` `country: US`.
+- Hassfest fixes: sorted `manifest.json` keys and `config_entry_only_config_schema`.
+- GitHub topics/description prepared for `hacs/default` submission.
+
 ## 0.1.0
 
 - Initial public distribution: HACS integration with embedded Lovelace card and Home Assistant OS app for the companion service.
