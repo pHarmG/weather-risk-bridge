@@ -5,13 +5,13 @@
       "reconfigure_successful": "Configuration updated."
     },
     "error": {
-      "cannot_connect": "Failed to connect to the Weather Risk Bridge service. If you use the Home Assistant app on this host, try http://HOME_ASSISTANT_HOST_IP:8099 — the app hostname often does not resolve, which means the app never sees the request.",
+      "cannot_connect": "Failed to connect to the Weather Risk Bridge service. On Home Assistant OS, use the discovered http://172.30.x.x:8099 app IP (or http://HOME_ASSISTANT_HOST_IP:8099). The weather-risk-bridge hostname often does not resolve.",
       "unknown": "Unexpected error."
     },
     "step": {
       "user": {
         "title": "Weather Risk Bridge",
-        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: on Home Assistant OS the integration tries to discover the local Weather Risk Bridge app IP automatically. If connection fails or the app logs show no request, use http://HOME_ASSISTANT_HOST_IP:8099 (port 8099 is published by the app). Do not rely on http://weather-risk-bridge:8099 unless Supervisor DNS resolves that name on your system.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
+        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: on Home Assistant OS this field is usually pre-filled with the local app address (http://172.30.x.x:8099). That Supervisor-network IP is correct — keep it. If empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
@@ -23,7 +23,7 @@
       },
       "reconfigure": {
         "title": "Reconfigure Weather Risk Bridge",
-        "description": "Update the service connection and latitude/longitude. For the same-host app, prefer the discovered app IP or http://HOME_ASSISTANT_HOST_IP:8099 if the app hostname does not resolve.",
+        "description": "Update the service connection and latitude/longitude. Keep a discovered http://172.30.x.x:8099 app IP when present.",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
@@ -39,7 +39,7 @@
     "step": {
       "init": {
         "title": "Weather Risk Bridge options",
-        "description": "Update the service connection and latitude/longitude. For the same-host app, prefer the discovered app IP or http://HOME_ASSISTANT_HOST_IP:8099 if the app hostname does not resolve.",
+        "description": "Update the service connection and latitude/longitude. Keep a discovered http://172.30.x.x:8099 app IP when present.",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",

@@ -14,9 +14,8 @@ CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
 CONF_WIND_THRESHOLD_MPH = "wind_threshold_mph"
 
-# Documented hostname when Supervisor DNS resolves the app. Same-host installs
-# should prefer discovery.py (app IP) or http://<HA-host-ip>:8099 because
-# weather-risk-bridge often does not appear in Supervisor DNS.
+# Fallback only when Supervisor discovery cannot find a local app.
+# On HAOS the config flow prefers http://<app-container-ip>:8099 from discovery.
 DEFAULT_SERVICE_URL = "http://weather-risk-bridge:8099"
 DEFAULT_WIND_THRESHOLD_MPH = 40
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=3)

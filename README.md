@@ -70,13 +70,21 @@ Skip this section if you are using [Docker instead](#docker-alternative-separate
 
 ### 1.4 Service URL for the next steps
 
-Supervisor DNS often **does not** resolve `weather-risk-bridge`, so Core never reaches the app and the app logs stay empty.
+On Home Assistant OS, the integration **discovers the running app** and pre-fills something like:
 
-Use one of these from the integration form:
+```text
+http://172.30.33.6:8099
+```
 
-1. **Recommended same-host:** `http://HOME_ASSISTANT_HOST_IP:8099` (for this network: `http://10.0.0.149:8099`). Port `8099` is published by the app.
-2. If the integration discovers the app, it may pre-fill `http://<app-container-ip>:8099`.
-3. `http://weather-risk-bridge:8099` only if `nslookup weather-risk-bridge` works inside Home Assistant.
+That `172.30.x.x` address is the app’s address on the Supervisor network. **Keep it** — it is the correct same-host URL. It is not a public LAN IP and it may change if the app container is recreated (open the integration options again if discovery needs to refresh).
+
+Do **not** expect `http://weather-risk-bridge:8099` to work on most installs: Supervisor DNS often does not resolve that hostname, so Core never reaches the app and the app logs stay empty.
+
+Fallbacks if discovery does not pre-fill:
+
+1. `http://HOME_ASSISTANT_HOST_IP:8099` (host port published by the app)
+2. For Docker on another machine: `http://THAT_HOST_LAN_IP:8099`
+
 ---
 
 ## Step 2 — Install the integration (HACS)
@@ -103,7 +111,7 @@ This is the step that points Weather Risk Bridge at **your** place.
 
 | Field | What to enter |
 |-------|----------------|
-| **Service URL** | Same-host app: use `http://HOME_ASSISTANT_HOST_IP:8099` (example `http://10.0.0.149:8099`) unless Supervisor DNS resolves the app hostname. Docker on another machine: `http://THAT_HOST_LAN_IP:8099`. Do **not** use `http://localhost:8099` from Home Assistant Core. |
+| **Service URL** | Same-host app: accept the discovered `http://172.30.x.x:8099` value (Supervisor app IP) or use `http://HOME_ASSISTANT_HOST_IP:8099`. Docker on another machine: `http://THAT_HOST_LAN_IP:8099`. Do **not** use `http://localhost:8099` from Home Assistant Core. |
 | **Bearer token** | Must match the app/Docker `token` if you set one. Otherwise leave blank. |
 | **Label** | Friendly name for this place, for example `Home` or `Cabin`. This becomes the entity slug (e.g. `home` → `weather.weather_risk_bridge_home`). |
 | **Latitude** | Decimal degrees for your location (north positive). Example: `30.2672`. |
