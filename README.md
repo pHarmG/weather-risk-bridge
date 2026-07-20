@@ -1,8 +1,40 @@
 # Weather Risk Bridge
 
-US-focused weather risk dashboard for Home Assistant: companion service + config-flow integration + Lovelace card.
+**See the storm risk for *your* coordinates — not a city-average forecast tile.**
 
-**Data coverage:** United States only (NWS + SPC). Non-US coordinates are not supported.
+Weather Risk Bridge is a Home Assistant **app + integration + Lovelace card** that turns official US weather risk data into a dashboard you can actually act on: temperature, feels-like, rain, storms, wind, hail, and tornado outlook — at the lat/lon you care about.
+
+<p align="center">
+  <img src="docs/media/hero-banner.webp" alt="Weather Risk Bridge card — quiet day, active weather, and storm night previews" width="100%" />
+</p>
+
+| Quiet conditions | Active weather | Storm risk |
+| --- | --- | --- |
+| <img src="docs/media/hero-quiet-day.webp" alt="Quiet day card header" width="100%" /> | <img src="docs/media/hero-active-day.webp" alt="Active day card with risk pills" width="100%" /> | <img src="docs/media/hero-storm-night.webp" alt="Storm night card with alerts" width="100%" /> |
+
+**Data coverage:** United States only ([NWS](https://www.weather.gov/) + [SPC](https://www.spc.noaa.gov/)). Non-US coordinates are not supported.
+
+---
+
+## Why install this?
+
+Most HA weather cards answer “what’s the temperature?” Weather Risk Bridge answers **“do I need to care in the next few hours?”**
+
+- **Risk, not just conditions** — rain chance, thunderstorm probability, strong-wind thresholds, hail & tornado outlook from SPC, plus NWS alerts — in one card.
+- **Your pin on the map** — you enter latitude/longitude once. Cabins, farms, and second homes work the same as “home.”
+- **Glanceable horizons** — switch `1h` / `4h` / `12h` / `24h` / `48h` without leaving the dashboard. Minute-scale nowcast when the service has it.
+- **Ambient stage UI** — daylight/night and weather-aware backdrop so the card reads like a product, not a sensor dump.
+- **HAOS-native app** — on Home Assistant OS / Supervised, install from the App store, leave the auto-discovered service URL, done. Docker on another host is fully supported if you prefer.
+
+### The companion app is the product core
+
+The Lovelace card is the face. The **Weather Risk Bridge app** (formerly “add-on”) is the engine:
+
+1. Talks to NWS / SPC (and optional WeatherKit nowcast) for the coordinates HA sends.
+2. Caches and shapes a single `/v1/snapshot` payload.
+3. Lets the integration publish clean weather + chart entities for the card.
+
+Without the app (or Docker equivalent), there is nothing for the card to render. Install the app first on HAOS — that is the intended path.
 
 ---
 
@@ -10,7 +42,7 @@ US-focused weather risk dashboard for Home Assistant: companion service + config
 
 You will do three things:
 
-1. Run the **companion service** (Home Assistant app on the HA host, **or** Docker on the HA host / a separate machine).
+1. Run the **companion service** (Home Assistant **app** on the HA host, **or** Docker on the HA host / a separate machine).
 2. Install the **Home Assistant integration** and enter **your location’s latitude and longitude**.
 3. Add the **Lovelace card**, bound to that location.
 
@@ -20,7 +52,7 @@ The integration polls the companion service using the coordinates you provide. T
 
 | Path | Use when |
 |------|----------|
-| **Home Assistant app** (recommended; formerly called an add-on) | You run Home Assistant OS / Supervised and want the fewest moving parts. Service runs on the same appliance as HA. |
+| **Home Assistant app** (recommended) | You run Home Assistant OS / Supervised and want the fewest moving parts. Service runs on the same appliance as HA. |
 | **Docker on another machine** | You want the API on a separate always-on host (NAS, mini PC, Linux box, etc.) while Home Assistant stays on its own device. This is a supported first-class setup. |
 | **Docker on the HA host** | You prefer compose/containers but are not using (or cannot use) the app store. |
 

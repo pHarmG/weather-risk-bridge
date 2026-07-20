@@ -1,10 +1,21 @@
 # Weather Risk Bridge App
 
-Companion NOAA/SPC API used by the **Weather Risk Bridge** Home Assistant integration.
+The companion engine for **Weather Risk Bridge**: official US weather risk (NWS + SPC) for *your* latitude/longitude, served to Home Assistant as a single snapshot API.
 
-## What it does
+![Storm / active card preview](https://raw.githubusercontent.com/pHarmG/weather-risk-bridge/main/docs/media/hero-storm-night.webp)
 
-Exposes:
+## Why run this app?
+
+Home Assistant Core should not scrape NOAA on every dashboard refresh. This app:
+
+- Pulls NWS forecasts/alerts and SPC convective outlook for the coordinates the integration sends
+- Caches upstream responses so HA polling stays light
+- Exposes a stable `GET /v1/snapshot` the integration turns into weather + chart entities
+- Powers the Lovelace card’s risk pills, horizons (`1h`–`48h`), and ambient stage UI
+
+On Home Assistant OS / Supervised, install from **Settings → Apps** — that is the intended product path. Docker on another machine is the escape hatch when you want the API off the HA box.
+
+## What it exposes
 
 - `GET /healthz`
 - `GET /v1/snapshot?lat=…&lon=…&label=…&wind_threshold_mph=…`
@@ -39,7 +50,7 @@ The app does **not** store your home coordinates. Enter them in the integration:
 4. Set **Label**, **Latitude**, and **Longitude** (decimal degrees; US west longitudes are negative). Copy from **Settings → System → General**, Google Maps (right-click), or a lat/lon lookup site.
 5. Add the Lovelace card with `location:` matching your label slug (for example `home`).
 
-Full walkthrough: [README.md](https://github.com/pHarmG/weather-risk-bridge/blob/main/README.md).
+Full walkthrough + card screenshots: [README.md](https://github.com/pHarmG/weather-risk-bridge/blob/main/README.md).
 
 ## Options
 

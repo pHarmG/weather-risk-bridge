@@ -2,7 +2,9 @@
 
 ## 0.1.2
 
+- Docs: product-focused README/app DOCS with card preview screenshots; clearer pitch for the HAOS companion app.
 - Reduce Lovelace card CPU: gate `shouldUpdate` on weather-risk entity fingerprints, convert dawn/dusk ambient PNGs to WebP (~12MB → ~0.15MB), soften backdrop blur, drop dead hero spill animation, poll coordinator every 5 minutes, enable static asset cache headers.
+
 ## 0.1.1
 
 - Add HACS Action + hassfest CI; set `hacs.json` `country: US`.
