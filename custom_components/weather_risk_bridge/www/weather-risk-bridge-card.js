@@ -936,6 +936,34 @@ function weatherEntityIdForLocation(location) {
   const locationKey = normalizeLocationKey(location);
   return locationKey ? `${WEATHER_RISK_BRIDGE_WEATHER_PREFIX}${locationKey}` : "";
 }
+function fingerprintHassEntity(entity) {
+  if (!entity) {
+    return "missing";
+  }
+  const attrs = entity.attributes ?? {};
+  return [
+    entity.state ?? "",
+    entity.last_updated ?? "",
+    entity.last_changed ?? "",
+    String(attrs.generated_at ?? "")
+  ].join("|");
+}
+function fingerprintWeatherRiskHassData(input) {
+  const states = input.hass?.states ?? {};
+  const normalizedLocation = input.location ? normalizeLocationKey(input.location) : "";
+  const baseEntityId = normalizedLocation ? baseEntityIdForLocation(normalizedLocation) : input.entity ? deriveBaseEntityId(input.entity) : "";
+  const chartEntityId = normalizedLocation ? chartEntityIdForLocation(normalizedLocation, input.selectedRange) : input.entity ? entityIdForRange(baseEntityId, input.selectedRange) : "";
+  const weatherEntityId = input.weatherEntity || (normalizedLocation ? weatherEntityIdForLocation(normalizedLocation) : chartEntityId ? deriveWeatherEntityId(chartEntityId) : "");
+  const strategicContextId = input.selectedRange === 1 && baseEntityId ? entityIdForRange(baseEntityId, 4) : "";
+  return [
+    chartEntityId,
+    fingerprintHassEntity(states[chartEntityId]),
+    weatherEntityId,
+    fingerprintHassEntity(states[weatherEntityId]),
+    strategicContextId,
+    strategicContextId ? fingerprintHassEntity(states[strategicContextId]) : ""
+  ].join("::");
+}
 function deriveLocationKeyFromEntityId(entityId) {
   const baseEntityId = deriveBaseEntityId(entityId);
   if (!baseEntityId.startsWith(WEATHER_RISK_BRIDGE_SENSOR_PREFIX)) {
@@ -4816,15 +4844,15 @@ function ambientImageUrl(fileName) {
 var AMBIENT_IMAGE_URLS = {
   clear_day: ambientImageUrl("Clear Day.webp"),
   clear_night: ambientImageUrl("Clear Night.webp"),
-  sunrise_clear: ambientImageUrl("Sunrise Clear.png"),
-  sunrise_partly_cloudy: ambientImageUrl("Sunrise Partly Cloudy.png"),
-  sunrise_overcast: ambientImageUrl("Sunrise Overcast.png"),
-  sunrise_fog: ambientImageUrl("Sunrise Fog.png"),
-  sunrise_light_rain: ambientImageUrl("Sunrise Light Rain.png"),
-  sunset_clear: ambientImageUrl("Sunset Clear.png"),
-  sunset_partly_cloudy: ambientImageUrl("Sunset Partly Cloudy.png"),
-  sunset_overcast: ambientImageUrl("Sunset Overcast.png"),
-  twilight_blue_hour_clear: ambientImageUrl("Twilight Blue Hour Clear.png"),
+  sunrise_clear: ambientImageUrl("Sunrise Clear.webp"),
+  sunrise_partly_cloudy: ambientImageUrl("Sunrise Partly Cloudy.webp"),
+  sunrise_overcast: ambientImageUrl("Sunrise Overcast.webp"),
+  sunrise_fog: ambientImageUrl("Sunrise Fog.webp"),
+  sunrise_light_rain: ambientImageUrl("Sunrise Light Rain.webp"),
+  sunset_clear: ambientImageUrl("Sunset Clear.webp"),
+  sunset_partly_cloudy: ambientImageUrl("Sunset Partly Cloudy.webp"),
+  sunset_overcast: ambientImageUrl("Sunset Overcast.webp"),
+  twilight_blue_hour_clear: ambientImageUrl("Twilight Blue Hour Clear.webp"),
   partly_cloudy_day: ambientImageUrl("Sunny Day Low Clouds.webp"),
   partly_cloudy_night: ambientImageUrl("Partly Cloudy Night.webp"),
   cloudy: ambientImageUrl("Cloudy Day.webp"),
@@ -5117,6 +5145,8 @@ var WeatherRiskBridgeCard = class extends i4 {
     this._compactChartMedia = null;
     this._instanceId = ++nextCardInstanceId;
     this._rangeRepaintFrame = null;
+    /** Skip full pipeline when hass churns for unrelated entities. */
+    this._lastHassFingerprint = "";
     // --- Layer 2 rendered validation fields (non-reactive; no update loop) ---
     /**
      * Panel layouts captured from the most recent render pass.
@@ -5165,6 +5195,36 @@ var WeatherRiskBridgeCard = class extends i4 {
       this._rangeRepaintFrame = null;
     }
     super.disconnectedCallback();
+  }
+  shouldUpdate(changedProperties) {
+    if (changedProperties.size === 0) {
+      return false;
+    }
+    const hassOnly = changedProperties.has("hass") && changedProperties.size === 1;
+    if (!hassOnly) {
+      if (changedProperties.has("hass") || !this._lastHassFingerprint) {
+        this._lastHassFingerprint = this._computeHassFingerprint();
+      }
+      return true;
+    }
+    const next = this._computeHassFingerprint();
+    if (next === this._lastHassFingerprint) {
+      return false;
+    }
+    this._lastHassFingerprint = next;
+    return true;
+  }
+  _computeHassFingerprint() {
+    if (!this._normalizedConfig) {
+      return "";
+    }
+    return fingerprintWeatherRiskHassData({
+      location: this._normalizedConfig.location,
+      entity: this._normalizedConfig.entity,
+      weatherEntity: this._normalizedConfig.weather_entity,
+      selectedRange: this._selectedRange,
+      hass: this.hass
+    });
   }
   _showDetailTooltip(event, detailText) {
     const trigger = event.currentTarget;
@@ -6257,7 +6317,6 @@ var WeatherRiskBridgeCard = class extends i4 {
     this._temperatureTooltipViewportRange = null;
     this._hideDetailTooltip();
     this.requestUpdate("_selectedRange", old);
-    this.requestUpdate();
   }
   _showTemperatureTooltip(index, anchor = null, panelKey = "temperature") {
     const old = this._selectedTemperatureTooltipIndex;
@@ -6266,7 +6325,6 @@ var WeatherRiskBridgeCard = class extends i4 {
     this._selectedTemperatureTooltipIndex = index;
     this._selectedTooltipPanelKey = panelKey;
     this.requestUpdate("_selectedTemperatureTooltipIndex", old);
-    this.requestUpdate();
   }
   _clearTemperatureTooltip() {
     if (this._selectedTemperatureTooltipIndex === null) return;
@@ -6275,7 +6333,6 @@ var WeatherRiskBridgeCard = class extends i4 {
     this._selectedTooltipPanelKey = null;
     this._temperatureTooltipViewportRange = null;
     this.requestUpdate("_selectedTemperatureTooltipIndex", old);
-    this.requestUpdate();
   }
   _handleChartPointerDown(event) {
     const path = event.composedPath();
@@ -6334,8 +6391,8 @@ WeatherRiskBridgeCard.styles = i`
       border: 1px solid var(--glass-line);
       border-radius: 24px;
       overflow: hidden;
-      backdrop-filter: blur(26px) saturate(1.24);
-      -webkit-backdrop-filter: blur(26px) saturate(1.24);
+      backdrop-filter: blur(12px) saturate(1.18);
+      -webkit-backdrop-filter: blur(12px) saturate(1.18);
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
         0 18px 42px rgba(0, 0, 0, 0.14);
@@ -6624,7 +6681,8 @@ WeatherRiskBridgeCard.styles = i`
       inset: 18% -10% -18% 24%;
       background: var(--ambient-spill);
       opacity: 0;
-      filter: blur(22px);
+      filter: none;
+      content: none;
     }
 
     .card-hero::after {
@@ -7485,6 +7543,12 @@ WeatherRiskBridgeCard.styles = i`
       animation: detail-pill-warning-pulse 1.6s ease-in-out infinite;
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      .detail-pill-badge[data-tone="warning"]::before {
+        animation: none;
+      }
+    }
+
     @keyframes detail-pill-warning-pulse {
       0%,
       100% {
@@ -8057,6 +8121,10 @@ WeatherRiskBridgeCard.styles = i`
       .chart-storm-spark {
         animation: none;
         opacity: 0;
+      }
+
+      .chart-storm-cap {
+        filter: none;
       }
     }
 
@@ -8663,23 +8731,6 @@ WeatherRiskBridgeCard.styles = i`
       .hero-range-cell {
         padding-bottom: 0;
         border-bottom: 0;
-      }
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      .card-hero::before {
-        animation: hero-spill-drift 26s ease-in-out infinite alternate;
-      }
-
-    }
-
-    @keyframes hero-spill-drift {
-      0% {
-        transform: translate3d(-1%, 0, 0) scale(1);
-      }
-
-      100% {
-        transform: translate3d(1%, -2%, 0) scale(1.04);
       }
     }
 
