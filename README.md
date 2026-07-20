@@ -265,7 +265,7 @@ Still enter **your** latitude and longitude in Step 3. The remote service does n
 
 ## Versions
 
-Integration, card, and app are versioned together. This tree is **0.1.1**.
+Integration, card, and app are versioned together. This tree is **0.1.2**.
 
 ## License
 

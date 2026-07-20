@@ -1,13 +1,18 @@
 {
   "domain": "weather_risk_bridge",
   "name": "Weather Risk Bridge",
-  "codeowners": ["@pHarmG"],
+  "codeowners": [
+    "@pHarmG"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http"],
+  "dependencies": [
+    "frontend",
+    "http"
+  ],
   "documentation": "https://github.com/pHarmG/weather-risk-bridge",
   "integration_type": "service",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/pHarmG/weather-risk-bridge/issues",
   "requirements": [],
-  "version": "0.1.1"
+  "version": "0.1.2"
 }
