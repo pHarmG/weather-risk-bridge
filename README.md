@@ -10,7 +10,7 @@ US-focused weather risk dashboard for Home Assistant: companion service + config
 
 You will do three things:
 
-1. Run the **companion service** (Supervisor add-on on the HA host, **or** Docker on the HA host / a separate machine).
+1. Run the **companion service** (Home Assistant app on the HA host, **or** Docker on the HA host / a separate machine).
 2. Install the **Home Assistant integration** and enter **your location’s latitude and longitude**.
 3. Add the **Lovelace card**, bound to that location.
 
@@ -20,34 +20,34 @@ The integration polls the companion service using the coordinates you provide. T
 
 | Path | Use when |
 |------|----------|
-| **Supervisor add-on** (recommended) | You run Home Assistant OS / Supervised and want the fewest moving parts. Service runs on the same appliance as HA. |
+| **Home Assistant app** (recommended; formerly called an add-on) | You run Home Assistant OS / Supervised and want the fewest moving parts. Service runs on the same appliance as HA. |
 | **Docker on another machine** | You want the API on a separate always-on host (NAS, mini PC, Linux box, etc.) while Home Assistant stays on its own device. This is a supported first-class setup. |
-| **Docker on the HA host** | You prefer compose/containers but are not using (or cannot use) the add-on store. |
+| **Docker on the HA host** | You prefer compose/containers but are not using (or cannot use) the app store. |
 
 ---
 
-## Step 1 — Install the companion service (add-on)
+## Step 1 — Install the companion service (Home Assistant app)
 
 Skip this section if you are using [Docker instead](#docker-alternative-separate-host-or-same-host).
 
 ### 1.1 Add this repository to Home Assistant
 
 1. Open Home Assistant in your browser.
-2. Go to **Settings → Add-ons**.
-3. Open the **Add-on store** (button at the lower right on most installs).
-4. Click the **⋮** menu (top right of the Add-on store) → **Repositories**.
+2. Go to **Settings → Apps**.
+3. Open the **App store** (button at the lower right on most installs).
+4. Click the **⋮** menu (top right of the App store) → **Repositories**.
 5. Paste this URL and click **Add**:
 
    `https://github.com/pHarmG/weather-risk-bridge`
 
-6. Close the repositories dialog. Refresh the Add-on store if the new add-on does not appear yet (pull-to-refresh on mobile, or leave and re-enter the store).
+6. Close the repositories dialog. Refresh the App store if the new app does not appear yet (pull-to-refresh on mobile, or leave and re-enter the store).
 
-### 1.2 Install the add-on
+### 1.2 Install the app
 
-1. In the Add-on store, search for **Weather Risk Bridge**.
+1. In the App store, search for **Weather Risk Bridge**.
 2. Open it → click **Install** and wait until install finishes (first build can take a few minutes).
 3. Leave **Start on boot** enabled (recommended).
-4. Optional but useful: enable **Watchdog** so Supervisor restarts the add-on if it crashes.
+4. Optional but useful: enable **Watchdog** so Supervisor restarts the app if it crashes.
 5. Optional: open the **Configuration** tab before the first start:
    - **`port`**: leave `8099` unless you know you need another host port.
    - **`token`**: leave empty for a first install, **or** set a long random string now if you want the API to require a bearer token (you must enter the same value later in the HA integration).
@@ -57,26 +57,26 @@ Skip this section if you are using [Docker instead](#docker-alternative-separate
 ### 1.3 Start it and confirm it is actually running
 
 1. Open the **Info** tab → click **Start**.
-2. Wait until the UI shows the add-on as **running** (not “stopped” / “error”).
+2. Wait until the UI shows the app as **running** (not “stopped” / “error”).
 3. Open the **Log** tab. You want a clean start without a Python traceback. A healthy start typically mentions listening / serving on port `8099`.
-4. Still on the add-on page, open **Info** again and confirm CPU/RAM are non-zero after a few seconds (idle is fine; “running” with immediate exit in the log is not).
+4. Still on the app page, open **Info** again and confirm CPU/RAM are non-zero after a few seconds (idle is fine; “running” with immediate exit in the log is not).
 5. Optional health check from any machine on your LAN that can reach Home Assistant’s host IP on the mapped port:
 
    ```bash
    curl -sS http://HOME_ASSISTANT_HOST_IP:8099/healthz
    ```
 
-   Expect a successful HTTP response (not connection refused). If this fails from your laptop but the add-on log looks fine, check that port `8099/tcp` is published in the add-on **Configuration / Network** section and that your firewall allows it.
+   Expect a successful HTTP response (not connection refused). If this fails from your laptop but the app log looks fine, check that port `8099/tcp` is published in the app **Configuration / Network** section and that your firewall allows it.
 
 ### 1.4 Service URL for the next steps
 
-From Home Assistant Core to this add-on, use:
+From Home Assistant Core to this app, use:
 
 ```text
 http://weather-risk-bridge:8099
 ```
 
-That hostname is the add-on’s DNS name on the Supervisor network. You will paste it into the integration form in Step 3 unless you chose Docker on another host.
+That hostname is the app’s DNS name on the Supervisor network. You will paste it into the integration form in Step 3 unless you chose Docker on another host.
 
 ---
 
@@ -104,8 +104,8 @@ This is the step that points Weather Risk Bridge at **your** place.
 
 | Field | What to enter |
 |-------|----------------|
-| **Service URL** | Add-on: keep `http://weather-risk-bridge:8099`. Docker on another machine: `http://THAT_HOST_LAN_IP:8099` (example `http://192.168.1.50:8099`). Do **not** use `http://localhost:8099` from Home Assistant if the service runs in a different container or on a different computer — `localhost` inside HA means HA itself, not your other host. |
-| **Bearer token** | Must match the add-on/Docker `token` if you set one. Otherwise leave blank. |
+| **Service URL** | App: keep `http://weather-risk-bridge:8099`. Docker on another machine: `http://THAT_HOST_LAN_IP:8099` (example `http://192.168.1.50:8099`). Do **not** use `http://localhost:8099` from Home Assistant if the service runs in a different container or on a different computer — `localhost` inside HA means HA itself, not your other host. |
+| **Bearer token** | Must match the app/Docker `token` if you set one. Otherwise leave blank. |
 | **Label** | Friendly name for this place, for example `Home` or `Cabin`. This becomes the entity slug (e.g. `home` → `weather.weather_risk_bridge_home`). |
 | **Latitude** | Decimal degrees for your location (north positive). Example: `30.2672`. |
 | **Longitude** | Decimal degrees for your location (west is **negative** in the US). Example: `-97.7431`. |
@@ -169,7 +169,7 @@ Storage-mode Lovelace (the default) registers this resource automatically after 
 
 ## Docker alternative (separate host or same host)
 
-Use Docker when you do **not** want the Supervisor add-on, or when you want the companion API on a **different machine** than Home Assistant.
+Use Docker when you do **not** want the Home Assistant app, or when you want the companion API on a **different machine** than Home Assistant.
 
 That split is intentional and supported: Home Assistant only needs HTTP access to the service. Many installs run HA on one device (for example a Raspberry Pi / HA Green / VM) and run this API on another always-on box (mini PC, NAS, Linux server). The integration’s **Service URL** is simply pointed at that other host’s LAN address.
 
@@ -252,13 +252,13 @@ Still enter **your** latitude and longitude in Step 3. The remote service does n
 
 | Piece | Role |
 |-------|------|
-| Supervisor add-on / Docker service | Aggregates NWS/SPC (optional WeatherKit) into `/v1/snapshot` using the lat/lon you configure |
+| Home Assistant app / Docker service | Aggregates NWS/SPC (optional WeatherKit) into `/v1/snapshot` using the lat/lon you configure |
 | `custom_components/weather_risk_bridge` | Stores your location; polls the service; creates weather + chart sensors |
 | Embedded Lovelace card | Renders those sensors for a `location:` slug |
 
 ## Versions
 
-Integration, card, and add-on are versioned together. This tree is **0.1.0**.
+Integration, card, and app are versioned together. This tree is **0.1.0**.
 
 ## License
 

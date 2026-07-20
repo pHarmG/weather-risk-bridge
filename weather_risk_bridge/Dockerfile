@@ -1,3 +1,4 @@
+# Home Assistant app image (Supervisor Docker API still uses type=addon)
 # https://developers.home-assistant.io/docs/add-ons/configuration#add-on-dockerfile
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.21
 FROM ${BUILD_FROM}

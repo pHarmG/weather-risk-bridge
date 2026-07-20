@@ -14,7 +14,7 @@ CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
 CONF_WIND_THRESHOLD_MPH = "wind_threshold_mph"
 
-# Hostname matches the Supervisor add-on `hostname` / DNS name on the HA network.
+# Hostname matches the Home Assistant app `hostname` / DNS name on the HA network.
 DEFAULT_SERVICE_URL = "http://weather-risk-bridge:8099"
 DEFAULT_WIND_THRESHOLD_MPH = 40
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=3)

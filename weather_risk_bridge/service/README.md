@@ -9,7 +9,7 @@ Stateless NOAA-backed companion service for the `weather_risk_bridge` Home Assis
 
 ## Environment
 
-Default service URL for the Home Assistant integration (Supervisor add-on) is `http://weather-risk-bridge:8099`.
+Default service URL for the Home Assistant integration (Home Assistant app) is `http://weather-risk-bridge:8099`.
 
 - `WEATHER_RISK_BRIDGE_HOST` default `0.0.0.0`
 - `WEATHER_RISK_BRIDGE_PORT` default `8099`
@@ -32,7 +32,7 @@ Default service URL for the Home Assistant integration (Supervisor add-on) is `h
 
 ## Home Assistant packaging
 
-For HACS + Supervisor add-on distribution, see [packaging/weather_risk_bridge/README.md](../../packaging/weather_risk_bridge/README.md) and run:
+For HACS + Home Assistant app distribution, see [packaging/weather_risk_bridge/README.md](../../packaging/weather_risk_bridge/README.md) and run:
 
 ```powershell
 .\scripts\packaging\weather_risk_bridge_export.ps1

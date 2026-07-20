@@ -11,7 +11,7 @@
     "step": {
       "user": {
         "title": "Weather Risk Bridge",
-        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: keep http://weather-risk-bridge:8099 when using the Supervisor add-on.\n\nLatitude / Longitude: enter your place in decimal degrees (US west longitudes are negative). Values often pre-fill from Home Assistant's home location (Settings → System → General); change them if this entry should track somewhere else.\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
+        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: keep http://weather-risk-bridge:8099 when using the Home Assistant app.\n\nLatitude / Longitude: enter your place in decimal degrees (US west longitudes are negative). Values often pre-fill from Home Assistant's home location (Settings → System → General); change them if this entry should track somewhere else.\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
@@ -23,7 +23,7 @@
       },
       "reconfigure": {
         "title": "Reconfigure Weather Risk Bridge",
-        "description": "Update the service connection and the latitude/longitude for this location. Add-on default URL is http://weather-risk-bridge:8099.",
+        "description": "Update the service connection and the latitude/longitude for this location. App default URL is http://weather-risk-bridge:8099.",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
@@ -39,7 +39,7 @@
     "step": {
       "init": {
         "title": "Weather Risk Bridge options",
-        "description": "Update the service connection and the latitude/longitude for this location. Add-on default URL is http://weather-risk-bridge:8099.",
+        "description": "Update the service connection and the latitude/longitude for this location. App default URL is http://weather-risk-bridge:8099.",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
