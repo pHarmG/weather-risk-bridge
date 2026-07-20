@@ -1,0 +1,30 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This location is already configured.",
+      "reconfigure_successful": "Configuration updated."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the Weather Risk Bridge service.",
+      "unknown": "Unexpected error."
+    },
+    "step": {
+      "user": {
+        "title": "Weather Risk Bridge",
+        "description": "Connect Home Assistant to a Weather Risk Bridge service. If you installed the Supervisor add-on, leave the default service URL (http://weather-risk-bridge:8099). For Docker on another host, use that host URL instead. US locations only (NWS/SPC)."
+      },
+      "reconfigure": {
+        "title": "Reconfigure Weather Risk Bridge",
+        "description": "Update the Weather Risk Bridge connection and location. Add-on default URL is http://weather-risk-bridge:8099."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Weather Risk Bridge options",
+        "description": "Update the Weather Risk Bridge connection and location. Add-on default URL is http://weather-risk-bridge:8099."
+      }
+    }
+  }
+}

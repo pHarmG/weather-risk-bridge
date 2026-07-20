@@ -1,0 +1,13 @@
+services:
+  weather-risk-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weather-risk-bridge
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    environment:
+      WEATHER_RISK_BRIDGE_PORT: "8099"
+      WEATHER_RISK_BRIDGE_TOKEN: "replace-me"
+      WEATHER_RISK_BRIDGE_USER_AGENT: "(https://github.com/pHarmG/weather-risk-bridge, weather-risk-bridge@users.noreply.github.com)"
