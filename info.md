@@ -4,11 +4,11 @@ Home Assistant integration and Lovelace card for US weather risk (NWS/SPC), pair
 
 ## Quick start
 
-1. Install the **Weather Risk Bridge** add-on from this repository and start it.
+1. Install the **Weather Risk Bridge** add-on (or run the companion service with Docker on this host or another machine — see the README).
 2. Install this repository in HACS as an **Integration**, then restart Home Assistant.
 3. **Settings → Devices & Services → Add Integration → Weather Risk Bridge**.
-4. Keep the default service URL `http://weather-risk-bridge:8099` when using the add-on.
-5. Enter a **label** (for example `Home`) and your location’s **latitude** and **longitude** in decimal degrees (US west longitudes are negative). Home Assistant often pre-fills your HA home coordinates — adjust them if needed.
-6. Add the **Weather Risk Bridge** card to a dashboard and set `location:` to the slug from your label (for example `home`).
+4. Service URL: `http://weather-risk-bridge:8099` for the add-on, or `http://OTHER_HOST_LAN_IP:8099` for Docker on a separate machine.
+5. Enter a **label** and your **latitude** / **longitude** (decimal degrees; US west longitudes are negative).
+6. Add the card with `location:` matching your label slug (for example `home`).
 
-Those coordinates drive the forecasts and risk charts. US locations only. Full setup details are in the repository README.
+Full setup, add-on verification, and separate-host Docker instructions are in the repository README.
