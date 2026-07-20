@@ -11,11 +11,27 @@
     "step": {
       "user": {
         "title": "Weather Risk Bridge",
-        "description": "Connect Home Assistant to a Weather Risk Bridge service. If you installed the Supervisor add-on, leave the default service URL (http://weather-risk-bridge:8099). For Docker on another host, use that host URL instead. US locations only (NWS/SPC)."
+        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: keep http://weather-risk-bridge:8099 when using the Supervisor add-on.\n\nLatitude / Longitude: enter your place in decimal degrees (US west longitudes are negative). Values often pre-fill from Home Assistant's home location (Settings → System → General); change them if this entry should track somewhere else.\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
+        "data": {
+          "service_url": "Service URL",
+          "bearer_token": "Bearer token (optional)",
+          "label": "Location label",
+          "latitude": "Latitude (decimal degrees)",
+          "longitude": "Longitude (decimal degrees, west is negative)",
+          "wind_threshold_mph": "Strong-wind threshold (mph)"
+        }
       },
       "reconfigure": {
         "title": "Reconfigure Weather Risk Bridge",
-        "description": "Update the Weather Risk Bridge connection and location. Add-on default URL is http://weather-risk-bridge:8099."
+        "description": "Update the service connection and the latitude/longitude for this location. Add-on default URL is http://weather-risk-bridge:8099.",
+        "data": {
+          "service_url": "Service URL",
+          "bearer_token": "Bearer token (optional)",
+          "label": "Location label",
+          "latitude": "Latitude (decimal degrees)",
+          "longitude": "Longitude (decimal degrees, west is negative)",
+          "wind_threshold_mph": "Strong-wind threshold (mph)"
+        }
       }
     }
   },
@@ -23,7 +39,15 @@
     "step": {
       "init": {
         "title": "Weather Risk Bridge options",
-        "description": "Update the Weather Risk Bridge connection and location. Add-on default URL is http://weather-risk-bridge:8099."
+        "description": "Update the service connection and the latitude/longitude for this location. Add-on default URL is http://weather-risk-bridge:8099.",
+        "data": {
+          "service_url": "Service URL",
+          "bearer_token": "Bearer token (optional)",
+          "label": "Location label",
+          "latitude": "Latitude (decimal degrees)",
+          "longitude": "Longitude (decimal degrees, west is negative)",
+          "wind_threshold_mph": "Strong-wind threshold (mph)"
+        }
       }
     }
   }

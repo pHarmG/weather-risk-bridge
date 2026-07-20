@@ -1,16 +1,30 @@
 # Python
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.venv/
+*$py.class
 *.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.Python
 
-# Node / OS
+# Node
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
 .DS_Store
 Thumbs.db
-*.log
+Desktop.ini
 
-# Editor
-.idea/
+# Editors
 .vscode/
+.idea/
+*.swp
+*.swo
+*~

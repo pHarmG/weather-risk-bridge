@@ -25,12 +25,18 @@ That hostname matches the add-on `hostname` and is the default service URL in th
 | `token` | Optional bearer token required by `/v1/snapshot` |
 | `user_agent` | NWS User-Agent identification string |
 
-## After install
+## After install — configure your location in Home Assistant
 
-1. Start the add-on and confirm logs show the service listening.
-2. Install the **Weather Risk Bridge** integration via HACS (same GitHub repository).
-3. Add the integration in **Settings → Devices & Services** and keep the default service URL when using this add-on.
-4. Add the **Weather Risk Bridge** Lovelace card (auto-registered in storage mode).
+The add-on itself does **not** store your home coordinates. You enter latitude/longitude when you add the **Weather Risk Bridge** integration:
+
+1. Start this add-on and confirm logs show the service listening.
+2. Install the **Weather Risk Bridge** integration via HACS (same GitHub repository) and restart Home Assistant.
+3. **Settings → Devices & Services → Add Integration → Weather Risk Bridge**.
+4. Keep the default service URL when using this add-on.
+5. Set **Label** (for example `Home`), **Latitude**, and **Longitude** for the place you want tracked (decimal degrees; US west longitudes are negative). You can copy coordinates from **Settings → System → General**, Google Maps (right-click), or a lat/lon lookup site.
+6. Add the **Weather Risk Bridge** Lovelace card and bind it with `location: home` (or whatever slug matches your label).
+
+Full walkthrough: repository [README.md](https://github.com/pHarmG/weather-risk-bridge/blob/main/README.md).
 
 ## Notes
 
