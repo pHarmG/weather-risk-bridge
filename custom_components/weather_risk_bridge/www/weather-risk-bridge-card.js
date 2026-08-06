@@ -2366,7 +2366,10 @@ function inferDaytime(condition, explicitDaytime) {
   if (normalized === "sunny" || normalized === "clear") return true;
   return null;
 }
-var AMBIENT_RAIN_SCENE_MIN_PROBABILITY = 15;
+// A rain backdrop is intentionally more conservative than the risk chart. A
+// small chance still belongs in the chart, but it should not make a hot, dry
+// afternoon look like it is raining.
+var AMBIENT_RAIN_SCENE_MIN_PROBABILITY = 55;
 var AMBIENT_STORM_SCENE_MIN_PROBABILITY = 35;
 function precipitationTypeToConditionKey(type, intensity = null) {
   switch (type) {
@@ -2390,10 +2393,15 @@ function resolveNowcastAtmosphereCondition(domain) {
   const nextHour = domain.nextHourPrecipitation;
   if (!nextHour || assessOneHourNowcastMode(nextHour) !== "ready") return null;
   if (nextHour.nextStartMinutes !== null && nextHour.nextStartMinutes <= 20) {
-    return precipitationTypeToConditionKey(
-      nextHour.nextType,
-      nextHour.peakIntensity
-    );
+    const nextTypeIsStorm = nextHour.nextType === "storm";
+    const nextProbability = nextTypeIsStorm ? nextHour.stormPeakProbability : nextHour.peakProbability;
+    const minimumProbability = nextTypeIsStorm ? AMBIENT_STORM_SCENE_MIN_PROBABILITY : AMBIENT_RAIN_SCENE_MIN_PROBABILITY;
+    if ((nextProbability ?? 0) >= minimumProbability) {
+      return precipitationTypeToConditionKey(
+        nextHour.nextType,
+        nextHour.peakIntensity
+      );
+    }
   }
   if ((nextHour.stormPeakProbability ?? 0) >= AMBIENT_STORM_SCENE_MIN_PROBABILITY) {
     return "lightning_rainy";
