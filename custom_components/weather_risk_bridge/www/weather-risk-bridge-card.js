@@ -1698,6 +1698,7 @@ function parseCurrentConditions(attrs) {
   const dewPointF = dewPointRaw === null || dewPointRaw === void 0 ? null : Number(dewPointRaw);
   const uvIndex = attrs.uv_index === null || attrs.uv_index === void 0 ? null : Number(attrs.uv_index);
   const uvPeakToday = attrs.uv_index_peak_today === null || attrs.uv_index_peak_today === void 0 ? null : Number(attrs.uv_index_peak_today);
+  const cloudCoverPercent = attrs.cloud_cover_percent === null || attrs.cloud_cover_percent === void 0 ? null : Number(attrs.cloud_cover_percent);
   const windUnit = typeof attrs.wind_speed_unit === "string" && attrs.wind_speed_unit.trim() ? attrs.wind_speed_unit.trim() : "mph";
   return {
     condition: typeof attrs.state === "string" ? attrs.state.trim().toLowerCase() : "",
@@ -1707,6 +1708,7 @@ function parseCurrentConditions(attrs) {
     dewPointF: dewPointF === null || Number.isNaN(dewPointF) ? null : dewPointF,
     uvIndex: uvIndex === null || Number.isNaN(uvIndex) ? null : uvIndex,
     uvPeakToday: uvPeakToday === null || Number.isNaN(uvPeakToday) ? null : uvPeakToday,
+    cloudCoverPercent: cloudCoverPercent === null || Number.isNaN(cloudCoverPercent) ? null : clampValue(cloudCoverPercent, 0, 100),
     daytime: typeof attrs.daytime === "boolean" ? attrs.daytime : null,
     shortForecast: typeof attrs.short_forecast === "string" ? attrs.short_forecast.trim() : null
   };
@@ -2371,6 +2373,8 @@ function inferDaytime(condition, explicitDaytime) {
 // afternoon look like it is raining.
 var AMBIENT_RAIN_SCENE_MIN_PROBABILITY = 55;
 var AMBIENT_STORM_SCENE_MIN_PROBABILITY = 35;
+var AMBIENT_CLEAR_SCENE_MAX_CLOUD_COVER = 20;
+var AMBIENT_PARTLY_CLOUDY_SCENE_MAX_CLOUD_COVER = 65;
 function precipitationTypeToConditionKey(type, intensity = null) {
   switch (type) {
     case "storm":
@@ -2561,6 +2565,18 @@ function hasMeaningfulRainBackdropSignal(domain) {
   );
   return rainPeak >= AMBIENT_RAIN_SCENE_MIN_PROBABILITY;
 }
+function resolveFairWeatherSceneCondition(domain, daytime) {
+  if (daytime === false) return "cloudy_night";
+  if (daytime !== true) return "cloudy";
+  const cloudCoverPercent = domain.currentConditions?.cloudCoverPercent;
+  if (cloudCoverPercent === null || cloudCoverPercent === void 0)
+    return "cloudy";
+  if (cloudCoverPercent <= AMBIENT_CLEAR_SCENE_MAX_CLOUD_COVER)
+    return "clear";
+  if (cloudCoverPercent <= AMBIENT_PARTLY_CLOUDY_SCENE_MAX_CLOUD_COVER)
+    return "partlycloudy";
+  return "cloudy";
+}
 function resolveAmbientAtmosphereCondition(domain, preferredCondition) {
   const nowcastCondition = resolveNowcastAtmosphereCondition(domain);
   if (nowcastCondition) return nowcastCondition;
@@ -2612,7 +2628,7 @@ function resolveAmbientSceneCondition(domain, atmosphereCondition, daytime) {
   const normalizedAtmosphere = normalizeConditionKey(atmosphereCondition);
   if (!isStormLikeCondition(normalizedAtmosphere)) {
     if (isRainLikeCondition(normalizedAtmosphere) && !hasMeaningfulRainBackdropSignal(domain)) {
-      return daytime === false ? "cloudy_night" : "cloudy";
+      return resolveFairWeatherSceneCondition(domain, daytime);
     }
     return normalizedAtmosphere;
   }
@@ -2620,9 +2636,9 @@ function resolveAmbientSceneCondition(domain, atmosphereCondition, daytime) {
     return normalizedAtmosphere;
   if (hasMeaningfulRainBackdropSignal(domain)) return "rainy";
   if (normalizedAtmosphere === "hail") {
-    return daytime === false ? "cloudy_night" : "cloudy";
+    return resolveFairWeatherSceneCondition(domain, daytime);
   }
-  return daytime === false ? "cloudy_night" : "cloudy";
+  return resolveFairWeatherSceneCondition(domain, daytime);
 }
 function buildDailyRangeMetric(domain) {
   if (!domain.temperatureSeries) return null;
