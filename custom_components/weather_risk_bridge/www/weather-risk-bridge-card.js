@@ -2406,7 +2406,7 @@ function resolveNowcastAtmosphereCondition(domain) {
   if ((nextHour.stormPeakProbability ?? 0) >= AMBIENT_STORM_SCENE_MIN_PROBABILITY) {
     return "lightning_rainy";
   }
-  if ((nextHour.peakProbability ?? 0) >= 55) {
+  if ((nextHour.peakProbability ?? 0) >= AMBIENT_RAIN_SCENE_MIN_PROBABILITY) {
     return "rainy";
   }
   return null;
@@ -2599,7 +2599,9 @@ function shouldEscalateStormBackdrop(domain, atmosphereCondition) {
     resolveNextHourStormPeak(domain)
   ) >= AMBIENT_STORM_SCENE_MIN_PROBABILITY;
   if (nowcastStormLike && strongNearTermConvectiveSignal) return true;
-  if (windowStormLike && currentStormLike) return true;
+  // Forecast-derived condition labels are intentionally broad and can both be
+  // storm-like for a slight chance. They are not independent confirmation of
+  // an active storm without an alert or a meaningful probability signal.
   if ((windowStormLike || currentStormLike) && convectiveAlertInEffect)
     return true;
   if ((windowStormLike || currentStormLike) && strongNearTermConvectiveSignal)
