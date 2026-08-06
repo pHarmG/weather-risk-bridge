@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Prevent a small forecast rain chance from switching the Lovelace card to a rainy backdrop; observed precipitation and meaningful rain or storm probabilities still take precedence.
+
 ## 0.1.2
 
 - Docs: product-focused README/app DOCS with card preview screenshots; clearer pitch for the HAOS companion app.
