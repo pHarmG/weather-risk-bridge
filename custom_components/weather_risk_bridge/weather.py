@@ -102,6 +102,7 @@ class WeatherRiskBridgeWeather(CoordinatorEntity, WeatherEntity):
         return {
             "uv_index": current.get("uv_index"),
             "uv_index_peak_today": self._uv_index_peak_today(),
+            "cloud_cover_percent": current.get("cloud_cover_percent"),
             "daytime": current.get("daytime"),
             "short_forecast": current.get("short_forecast"),
         }

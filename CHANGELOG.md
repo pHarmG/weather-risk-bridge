@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Use the current cloud-cover percentage to select clear, partly cloudy, or cloudy scenery after a low-confidence precipitation/storm condition is suppressed. The card now chooses a clear-day scene for the current 5% cloud-cover payload instead of falling back to overcast.
+
 ## 0.1.4
 
 - Prevent duplicate, forecast-derived storm condition labels from overriding the ambient-scene probability threshold. Storm backdrops now require observed storm precipitation, an in-effect convective alert, or at least a 35% near-term storm probability.
