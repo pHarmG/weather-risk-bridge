@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Prevent duplicate, forecast-derived storm condition labels from overriding the ambient-scene probability threshold. Storm backdrops now require observed storm precipitation, an in-effect convective alert, or at least a 35% near-term storm probability.
+
 ## 0.1.3
 
 - Prevent a small forecast rain chance from switching the Lovelace card to a rainy backdrop; observed precipitation and meaningful rain or storm probabilities still take precedence.
