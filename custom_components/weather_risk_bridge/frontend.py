@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from pathlib import Path
 
@@ -17,6 +18,35 @@ _LOGGER = logging.getLogger(__name__)
 
 def card_resource_url() -> str:
     return f"{FRONTEND_URL_BASE}/{CARD_FILENAME}?v={VERSION}"
+
+
+def _get_lovelace_data(hass: HomeAssistant):
+    """Return Lovelace runtime data across supported Home Assistant releases.
+
+    Home Assistant 2025.6 introduced the typed ``LOVELACE_DATA`` hass-data key.
+    Earlier supported releases keep the same data under the ``"lovelace"``
+    string key. Importing the newer key lazily keeps the integration compatible
+    with both layouts.
+    """
+    lovelace = None
+    try:
+        from homeassistant.components.lovelace.const import LOVELACE_DATA
+    except ImportError:
+        # Home Assistant versions before the typed key was introduced.
+        pass
+    else:
+        lovelace = hass.data.get(LOVELACE_DATA)
+
+    if lovelace is None:
+        lovelace = hass.data.get("lovelace")
+    return lovelace
+
+
+def _lovelace_value(lovelace, name: str, default=None):
+    """Read a Lovelace value from either its legacy dict or typed dataclass."""
+    if isinstance(lovelace, Mapping):
+        return lovelace.get(name, default)
+    return getattr(lovelace, name, default)
 
 
 async def async_register_frontend(hass: HomeAssistant) -> None:
@@ -67,12 +97,17 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
 
 async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
     card_url = card_resource_url()
-    lovelace = hass.data.get("lovelace")
+    lovelace = _get_lovelace_data(hass)
     if lovelace is None:
         _LOGGER.debug("Lovelace not ready; deferred card resource registration")
         return
 
-    mode = getattr(lovelace, "mode", None)
+    # ``resource_mode`` replaces ``mode`` in current Home Assistant releases.
+    mode = _lovelace_value(
+        lovelace,
+        "resource_mode",
+        _lovelace_value(lovelace, "mode"),
+    )
     if mode != "storage":
         _LOGGER.info(
             "Lovelace is not in storage mode; add module resource manually: %s",
@@ -80,7 +115,7 @@ async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
         )
         return
 
-    resources = getattr(lovelace, "resources", None)
+    resources = _lovelace_value(lovelace, "resources")
     if resources is None:
         return
 

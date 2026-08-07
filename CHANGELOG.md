@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- Reliably advance the embedded card's Lovelace resource URL after a HACS update on both legacy and current Home Assistant releases. The updater now supports Home Assistant's typed Lovelace data key and the newer `resource_mode` field, while retaining the older layout for the stated minimum Home Assistant version. Lovelace is also an explicit integration dependency, so the resource collection exists before the update is attempted.
+
 ## 0.1.8
 
 - Replace the timing-based Lovelace resource retry with Home Assistant's component-ready hook. The card resource now updates as soon as Lovelace itself finishes setup, including on systems where it loads after Home Assistant's global started event.
