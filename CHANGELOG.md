@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- Ensure the integration rechecks Lovelace resources once Home Assistant has fully started, so HACS updates reliably advance the card's cache-busting resource URL even when Lovelace initializes after the short startup retry.
+
 ## 0.1.6
 
 - Apply low-cloud-cover scenery selection at night as well: clear-night, partly-cloudy-night, or cloudy-night now follows the same cloud-cover data rather than always falling back to cloudy-night.

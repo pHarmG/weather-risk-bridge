@@ -6,7 +6,8 @@ import logging
 from pathlib import Path
 
 from homeassistant.components.http import StaticPathConfig
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers.event import async_call_later
 
 from .const import CARD_FILENAME, DOMAIN, FRONTEND_URL_BASE, VERSION
@@ -53,6 +54,18 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         await _async_register_lovelace_resource(hass)
 
     async_call_later(hass, 5.0, _retry)
+
+    # Lovelace can finish loading after the short startup retry. Ensure an
+    # updated integration version gets a new cache-busting resource URL once
+    # Home Assistant has finished starting.
+    if hass.state is not CoreState.running:
+        def _register_after_start(_event) -> None:
+            hass.async_create_task(_async_register_lovelace_resource(hass))
+
+        hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STARTED,
+            _register_after_start,
+        )
 
 
 async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
