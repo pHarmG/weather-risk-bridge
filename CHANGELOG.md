@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+- Replace the timing-based Lovelace resource retry with Home Assistant's component-ready hook. The card resource now updates as soon as Lovelace itself finishes setup, including on systems where it loads after Home Assistant's global started event.
+
 ## 0.1.7
 
 - Ensure the integration rechecks Lovelace resources once Home Assistant has fully started, so HACS updates reliably advance the card's cache-busting resource URL even when Lovelace initializes after the short startup retry.
