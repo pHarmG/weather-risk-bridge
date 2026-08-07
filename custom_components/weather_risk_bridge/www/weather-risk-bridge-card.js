@@ -2566,16 +2566,16 @@ function hasMeaningfulRainBackdropSignal(domain) {
   return rainPeak >= AMBIENT_RAIN_SCENE_MIN_PROBABILITY;
 }
 function resolveFairWeatherSceneCondition(domain, daytime) {
-  if (daytime === false) return "cloudy_night";
-  if (daytime !== true) return "cloudy";
+  const isNight = daytime === false;
+  if (!isNight && daytime !== true) return "cloudy";
   const cloudCoverPercent = domain.currentConditions?.cloudCoverPercent;
   if (cloudCoverPercent === null || cloudCoverPercent === void 0)
-    return "cloudy";
+    return isNight ? "cloudy_night" : "cloudy";
   if (cloudCoverPercent <= AMBIENT_CLEAR_SCENE_MAX_CLOUD_COVER)
-    return "clear";
+    return isNight ? "clear_night" : "clear";
   if (cloudCoverPercent <= AMBIENT_PARTLY_CLOUDY_SCENE_MAX_CLOUD_COVER)
     return "partlycloudy";
-  return "cloudy";
+  return isNight ? "cloudy_night" : "cloudy";
 }
 function resolveAmbientAtmosphereCondition(domain, preferredCondition) {
   const nowcastCondition = resolveNowcastAtmosphereCondition(domain);

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 DOMAIN = "weather_risk_bridge"
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 PLATFORMS = ["sensor", "weather"]
 
 CONF_SERVICE_URL = "service_url"

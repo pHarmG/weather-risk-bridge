@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- Apply low-cloud-cover scenery selection at night as well: clear-night, partly-cloudy-night, or cloudy-night now follows the same cloud-cover data rather than always falling back to cloudy-night.
+
 ## 0.1.5
 
 - Use the current cloud-cover percentage to select clear, partly cloudy, or cloudy scenery after a low-confidence precipitation/storm condition is suppressed. The card now chooses a clear-day scene for the current 5% cloud-cover payload instead of falling back to overcast.
