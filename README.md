@@ -196,6 +196,7 @@ Common options (all available in the visual editor):
 | --- | --- | --- |
 | `default_range` | `12` | `1`, `4`, `12`, `24`, `48`, `120` |
 | `chart_style` | `line` | `line`, `bars` |
+| `ranges` | all available | list of range buttons to show, e.g. `[4, 12, 24, 120]` to offer 5 days instead of 48h |
 | `x_axis_labels` | `compact` | `compact`, `full`, `off` |
 | `probability_axis_mode` | `adaptive` | `adaptive`, `fixed_10`, `fixed_25`, `fixed_50`, `fixed_100`, `auto` |
 | `low_risk_behavior` | `icons` | `icons`, `hide`, `show` |

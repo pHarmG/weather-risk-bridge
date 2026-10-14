@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+
+- The hero's current temperature and feels-like no longer change with the selected range. They now always come from the hourly forecast; previously they used the first point of the selected range, which averages 3 hours at 48h and 6 hours at 5 days. Range still reflects the selected window.
+- New **Range buttons** option (`ranges`) in the View section of the editor: choose which range buttons appear, for example 5 days instead of 48h. Leaving it empty shows every available range.
+
 ## 0.2.5
 
 - Fix the card not finding sensors whose entity ids carry a device-name prefix. Recent Home Assistant releases create new entities as `sensor.home_weather_risk_bridge_home_chart_120h` rather than `sensor.weather_risk_bridge_home_chart_120h`, so the 5d range never appeared on existing locations (their new 120h sensor got the prefix) and locations added recently could not be found by `location:` at all. The card now resolves chart, nowcast and weather entities with or without the prefix, and the editor lists prefixed locations too.

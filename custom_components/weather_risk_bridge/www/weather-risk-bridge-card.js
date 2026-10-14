@@ -1622,6 +1622,9 @@ function resolveEntityBundle(locationKey, entityId, weatherEntityIdOverride, has
   const baseEntityId = effectiveLocation ? baseEntityIdForLocation(effectiveLocation) : deriveBaseEntityId(entityId);
   const chartEntityId = resolveStateEntityId(hass.states, entityIdForRange(baseEntityId, selectedRange));
   const strategicContextChartEntityId = selectedRange === 1 ? resolveStateEntityId(hass.states, entityIdForRange(baseEntityId, 4)) : null;
+  // Hourly (4h) series used for the hero's current readings on every range, so
+  // "now" does not shift with each range's bin size (3h at 48h, 6h at 5 days).
+  const currentReferenceChartEntityId = resolveStateEntityId(hass.states, entityIdForRange(baseEntityId, 4));
   const resolvedWeatherId = weatherEntityIdOverride ?? resolveStateEntityId(hass.states, effectiveLocation ? weatherEntityIdForLocation(effectiveLocation) : deriveWeatherEntityId(entityId));
   const inferredKey = effectiveLocation;
   const resolved = {
@@ -1683,6 +1686,7 @@ function resolveEntityBundle(locationKey, entityId, weatherEntityIdOverride, has
       chartEntityState: chartEntity.state,
       chartEntityAttributes: chartEntity.attributes,
       strategicContextChartEntityAttributes: strategicContextChartEntity?.attributes ?? null,
+      currentReferenceChartEntityAttributes: hass.states[currentReferenceChartEntityId]?.attributes ?? null,
       weatherEntityAttributes: weatherEntity ? {
         ...weatherEntity.attributes,
         state: weatherEntity.state
@@ -1848,6 +1852,13 @@ function parseCurrentConditions(attrs) {
     shortForecast: typeof attrs.short_forecast === "string" ? attrs.short_forecast.trim() : null
   };
 }
+function parseReferenceTemperatureSeries(attributes) {
+  const rawSeries = Array.isArray(attributes?.series) ? attributes.series : [];
+  const temperature = rawSeries.find((series) => series?.key === "temperature");
+  const rawPoints = Array.isArray(temperature?.points) ? temperature.points : [];
+  const points = rawPoints.map((raw, index) => parseRawTemperaturePoint(raw, index)).filter((pt) => pt !== null);
+  return points.length > 0 ? { points } : null;
+}
 function resolveCurrentTemperatureWindow(series) {
   const now = Date.now();
   let nearestIndex = 0;
@@ -1977,7 +1988,8 @@ function buildCardDomainModel(bundle, options) {
   const nearTermStrategicPrecipContext = options.selectedRange === 1 ? parseNearTermStrategicPrecipContext(
     bundle.strategicContextChartEntityAttributes
   ) : null;
-  const currentTemperatureWindow = temperatureSeries ? resolveCurrentTemperatureWindow(temperatureSeries) : null;
+  const hourlyReferenceSeries = parseReferenceTemperatureSeries(bundle.currentReferenceChartEntityAttributes);
+  const currentTemperatureWindow = hourlyReferenceSeries ? resolveCurrentTemperatureWindow(hourlyReferenceSeries) : temperatureSeries ? resolveCurrentTemperatureWindow(temperatureSeries) : null;
   const fallbackSummary = typeof bundle.chartEntityAttributes.summary === "string" ? bundle.chartEntityAttributes.summary : "";
   const observer = parseChartObserver(bundle.chartEntityAttributes);
   const hailSignal = parseHailSignal(bundle.chartEntityAttributes);
@@ -5522,6 +5534,8 @@ function normalizeCardConfig(config = {}) {
     low_risk_threshold: normalizeLowRiskThreshold(config.low_risk_threshold),
     label_dedupe: config.label_dedupe === true || config.label_dedupe === "on",
     chart_style: config.chart_style === "line" || config.chart_style === "bars" ? config.chart_style : DEFAULT_CHART_STYLE,
+    // Optional subset of range buttons to show; empty/absent shows every available range.
+    ranges: Array.isArray(config.ranges) ? rangeValues().filter((value) => config.ranges.map(Number).includes(value)) : [],
     // Curve experiment rolled back: default to no celestial track unless explicitly enabled.
     celestial_track: config.celestial_track === true
   };
@@ -5886,7 +5900,17 @@ var WeatherRiskBridgeCard = class extends i4 {
           row([
             { name: "default_range", selector: dropdown(rangeValues().map((value) => [String(value), rangeOptionLabel(value)])) },
             { name: "chart_style", selector: dropdown([["line", "Line (smooth curves)"], ["bars", "Bars (columns)"]]) }
-          ])
+          ]),
+          {
+            name: "ranges",
+            selector: {
+              select: {
+                multiple: true,
+                mode: "list",
+                options: rangeValues().map((value) => ({ value: String(value), label: rangeOptionLabel(value) }))
+              }
+            }
+          }
         ]),
         section("Axes and labels", [
           row([
@@ -5934,6 +5958,7 @@ var WeatherRiskBridgeCard = class extends i4 {
         entity: "Location",
         default_range: "Default range",
         chart_style: "Chart style",
+        ranges: "Range buttons",
         probability_axis_mode: "Probability axis",
         temperature_axis_mode: "Temperature axis",
         x_axis_labels: "Time labels",
@@ -5949,6 +5974,7 @@ var WeatherRiskBridgeCard = class extends i4 {
         entity: "Any chart sensor of the Weather Risk Suite location to show.",
         default_range: "5 days appears once the companion app provides it.",
         chart_style: "Line is smoother; bars add storm caps and hail per bar.",
+        ranges: "Pick which ranges to offer (e.g. 5 days instead of 48h). None checked shows all available.",
         probability_axis_mode: "Adaptive keeps low risk legible.",
         temperature_axis_mode: "Fixed keeps ranges on one scale.",
         low_risk_behavior: "When risk stays at or below the threshold.",
@@ -6020,6 +6046,11 @@ var WeatherRiskBridgeCard = class extends i4 {
     if (oneHourState && oneHourMode === "ready") {
       const visibleSet = /* @__PURE__ */ new Set([1, ...rangeOptions]);
       rangeOptions = canonical.filter((rangeHours) => visibleSet.has(rangeHours));
+    }
+    const preferredRanges = this._normalizedConfig.ranges ?? [];
+    if (preferredRanges.length > 0) {
+      const preferred = rangeOptions.filter((rangeHours) => preferredRanges.includes(rangeHours));
+      if (preferred.length > 0) rangeOptions = preferred;
     }
     if (rangeOptions.length === 0) {
       rangeOptions = strategic;
