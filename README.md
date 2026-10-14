@@ -186,9 +186,24 @@ YAML example:
 ```yaml
 type: custom:weather-risk-bridge-card
 location: home
-title: Home Weather Risk
-default_range: 12
+default_range: 12   # 1, 4, 12, 24, 48 or 120 (5 days)
+chart_style: line   # line (default) or bars
 ```
+
+Common options (all available in the visual editor):
+
+| Option | Default | Values |
+| --- | --- | --- |
+| `default_range` | `12` | `1`, `4`, `12`, `24`, `48`, `120` |
+| `chart_style` | `line` | `line`, `bars` |
+| `x_axis_labels` | `compact` | `compact`, `full`, `off` |
+| `probability_axis_mode` | `adaptive` | `adaptive`, `fixed_10`, `fixed_25`, `fixed_50`, `fixed_100`, `auto` |
+| `low_risk_behavior` | `icons` | `icons`, `hide`, `show` |
+| `low_risk_threshold` | `5` | `0`, `1`, `2`, `5`, `10` |
+| `label_dedupe` | `false` | `true` hides repeated value labels |
+| `show_alerts` / `max_alerts` | `true` / `3` | alert chips in the header |
+
+The **5d** range button appears once the 120h forecast exists: update both the companion app (0.2.0 or newer) and the integration, then restart Home Assistant so the new `chart_120h` sensors are created.
 
 The card does **not** fetch weather by itself. It renders the entities created for the location you configured in Step 3. If the card is empty, confirm the `location:` slug matches the integration label slug and that the chart sensors exist under **Developer Tools → States**.
 

@@ -5326,7 +5326,7 @@ function logRenderedValidation(result) {
 // src/weather-risk-bridge-card.ts
 var CARD_TYPE = "weather-risk-bridge-card";
 var EDITOR_TYPE = "weather-risk-bridge-card-editor";
-var DEFAULT_RANGE = 4;
+var DEFAULT_RANGE = 12;
 var DEFAULT_EDITOR_RANGE = 12;
 var DEFAULT_MAX_ALERTS = 3;
 var DEFAULT_TEMPERATURE_DISPLAY = "always";
@@ -5335,9 +5335,9 @@ var DEFAULT_TEMPERATURE_AXIS_MODE = "auto";
 var DEFAULT_X_AXIS_LABEL_MODE = "compact";
 var DEFAULT_SERIES_LAYOUT = "stacked";
 var DEFAULT_SERIES_COLUMNS = 2;
-var DEFAULT_CHART_STYLE = "bars";
+var DEFAULT_CHART_STYLE = "line";
 var DEFAULT_LOW_RISK_BEHAVIOR = "icons";
-var DEFAULT_LOW_RISK_THRESHOLD = 2;
+var DEFAULT_LOW_RISK_THRESHOLD = 5;
 var DEFAULT_WIND_THRESHOLD_MPH = 25;
 var nextCardInstanceId = 0;
 function resolvePrecipitationBarVisualMode(layout) {
@@ -5428,7 +5428,9 @@ function locationFormStateFromSchema(schema, fallback, entryId = "") {
     )
   };
 }
-function normalizeMaxAlerts(value) {
+function normalizeMaxAlerts(rawValue) {
+  // The visual editor stores select values as strings ("3"); accept both.
+  const value = typeof rawValue === "string" && rawValue.trim() !== "" ? Number(rawValue) : rawValue;
   if (typeof value !== "number" || Number.isNaN(value)) {
     return DEFAULT_MAX_ALERTS;
   }
@@ -5441,7 +5443,8 @@ function normalizeSeriesColumns(value) {
   const rounded = Math.round(value);
   return rounded === 3 || rounded === 4 ? rounded : 2;
 }
-function normalizeLowRiskThreshold(value) {
+function normalizeLowRiskThreshold(rawValue) {
+  const value = typeof rawValue === "string" && rawValue.trim() !== "" ? Number(rawValue) : rawValue;
   if (typeof value !== "number" || Number.isNaN(value)) {
     return DEFAULT_LOW_RISK_THRESHOLD;
   }
@@ -5492,7 +5495,7 @@ function normalizeCardConfig(config = {}) {
     low_risk_behavior: normalizeLowRiskBehavior(config.low_risk_behavior),
     low_risk_threshold: normalizeLowRiskThreshold(config.low_risk_threshold),
     label_dedupe: config.label_dedupe === true || config.label_dedupe === "on",
-    chart_style: config.chart_style === "line" ? "line" : DEFAULT_CHART_STYLE,
+    chart_style: config.chart_style === "line" || config.chart_style === "bars" ? config.chart_style : DEFAULT_CHART_STYLE,
     // Curve experiment rolled back: default to no celestial track unless explicitly enabled.
     celestial_track: config.celestial_track === true
   };
@@ -5521,12 +5524,12 @@ function emitConfigChanged(element, config) {
 }
 function stubConfig(hass) {
   const entity = cardEntityOptions(hass?.states ?? {})[0] ?? "";
-  return normalizeCardConfig({
+  const config = normalizeCardConfig({
     type: `custom:${CARD_TYPE}`,
     entity,
     location: deriveLocationKeyFromEntityId(entity),
-    title: "Weather Risk",
     default_range: DEFAULT_EDITOR_RANGE,
+    chart_style: DEFAULT_CHART_STYLE,
     show_alerts: true,
     max_alerts: DEFAULT_MAX_ALERTS,
     temperature_display: DEFAULT_TEMPERATURE_DISPLAY,
@@ -5539,6 +5542,14 @@ function stubConfig(hass) {
     low_risk_behavior: DEFAULT_LOW_RISK_BEHAVIOR,
     low_risk_threshold: DEFAULT_LOW_RISK_THRESHOLD
   });
+  // HA's select selector only shows string values, so store these as strings;
+  // normalizeCardConfig converts them back to numbers when the card reads them.
+  return {
+    ...config,
+    default_range: String(config.default_range),
+    low_risk_threshold: String(config.low_risk_threshold),
+    max_alerts: String(config.max_alerts)
+  };
 }
 function renderDetailPill(pill, handlers) {
   const content = b2`
@@ -5829,252 +5840,94 @@ var WeatherRiskBridgeCard = class extends i4 {
       right: (plot.scrollLeft + plot.clientWidth) * scaleX
     };
   }
+  // Visual editor (Home Assistant ha-form). Every select uses dropdown mode so
+  // fields line up as uniform controls instead of radio lists of varying
+  // height, and related fields are paired two per row under section headings.
   static getConfigForm() {
+    const dropdown = (options) => ({
+      select: { mode: "dropdown", options: options.map(([value, label]) => ({ value, label })) }
+    });
+    const section = (title, schema) => ({ type: "expandable", name: "", title, flatten: true, expanded: true, schema });
+    const row = (schema) => ({ type: "grid", name: "", flatten: true, column_min_width: "200px", schema });
     return {
       schema: [
         {
           name: "entity",
           required: true,
-          selector: {
-            entity: {
-              filter: [
-                {
-                  integration: "weather_risk_bridge",
-                  domain: "sensor"
-                }
-              ]
-            }
-          }
+          selector: { entity: { filter: [{ integration: "weather_risk_bridge", domain: "sensor" }] } }
         },
-        { name: "title", selector: { text: {} } },
-        {
-          type: "grid",
-          name: "",
-          flatten: true,
-          schema: [
-            {
-              name: "default_range",
-              selector: {
-                select: {
-                  options: rangeValues().map((value) => ({
-                    label: rangeOptionLabel(value),
-                    value: String(value)
-                  }))
-                }
-              }
-            }
-          ]
-        },
-        {
-          type: "grid",
-          name: "",
-          flatten: true,
-          schema: [
-            {
-              name: "chart_style",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Bars (columns)", value: "bars" },
-                    { label: "Line", value: "line" }
-                  ]
-                }
-              }
-            }
-          ]
-        },
-        {
-          type: "grid",
-          name: "",
-          flatten: true,
-          schema: [
+        section("View", [
+          row([
+            { name: "default_range", selector: dropdown(rangeValues().map((value) => [String(value), rangeOptionLabel(value)])) },
+            { name: "chart_style", selector: dropdown([["line", "Line (smooth curves)"], ["bars", "Bars (columns)"]]) }
+          ])
+        ]),
+        section("Axes and labels", [
+          row([
             {
               name: "probability_axis_mode",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Adaptive risk scale", value: "adaptive" },
-                    { label: "Fixed 0 to 10%", value: "fixed_10" },
-                    { label: "Fixed 0 to 25%", value: "fixed_25" },
-                    { label: "Fixed 0 to 50%", value: "fixed_50" },
-                    { label: "Fixed 0 to 100%", value: "fixed_100" },
-                    { label: "Auto scale to current peak", value: "auto" }
-                  ]
-                }
-              }
+              selector: dropdown([
+                ["adaptive", "Adaptive (recommended)"],
+                ["auto", "Auto to current peak"],
+                ["fixed_10", "Fixed 0–10%"],
+                ["fixed_25", "Fixed 0–25%"],
+                ["fixed_50", "Fixed 0–50%"],
+                ["fixed_100", "Fixed 0–100%"]
+              ])
             },
             {
               name: "temperature_axis_mode",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Auto scale to visible temperatures", value: "auto" },
-                    { label: "Fixed 20F span around forecast center", value: "fixed_span_20f" }
-                  ]
-                }
-              }
-            },
-            {
-              name: "x_axis_labels",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Compact", value: "compact" },
-                    { label: "Full", value: "full" },
-                    { label: "Off", value: "off" }
-                  ]
-                }
-              }
-            },
-            {
-              name: "label_dedupe",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Show all values", value: "off" },
-                    { label: "Hide repeated values", value: "on" }
-                  ]
-                }
-              }
+              selector: dropdown([["auto", "Auto (fit forecast)"], ["fixed_span_20f", "Fixed 20°F span"]])
             }
-          ]
-        },
-        {
-          type: "grid",
-          name: "",
-          flatten: true,
-          schema: [
+          ]),
+          row([
+            { name: "x_axis_labels", selector: dropdown([["compact", "Compact"], ["full", "Every label"], ["off", "Off"]]) },
+            { name: "label_dedupe", selector: dropdown([["off", "Show all values"], ["on", "Hide repeated values"]]) }
+          ]),
+          row([{ name: "show_y_axis_labels", selector: { boolean: {} } }])
+        ]),
+        section("Hazards and alerts", [
+          row([
             {
               name: "low_risk_behavior",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Show muted inactive hazard icons", value: "icons" },
-                    { label: "Hide quiet hazards entirely", value: "hide" },
-                    { label: "Always show quiet hazard charts", value: "show" }
-                  ]
-                }
-              }
+              selector: dropdown([["icons", "Muted hazard icons"], ["hide", "Hide quiet hazards"], ["show", "Always show charts"]])
             },
-            {
-              name: "low_risk_threshold",
-              selector: {
-                select: {
-                  options: [
-                    { label: "0%", value: "0" },
-                    { label: "1%", value: "1" },
-                    { label: "2%", value: "2" },
-                    { label: "5%", value: "5" },
-                    { label: "10%", value: "10" }
-                  ]
-                }
-              }
-            },
+            { name: "low_risk_threshold", selector: dropdown(["0", "1", "2", "5", "10"].map((value) => [value, `${value}%`])) }
+          ]),
+          row([
             {
               name: "temperature_display",
-              selector: {
-                select: {
-                  options: [
-                    { label: "Always show temperature", value: "always" },
-                    { label: "Only show temperature when hazards are quiet", value: "fallback_only" }
-                  ]
-                }
-              }
-            }
-          ]
-        },
-        {
-          type: "grid",
-          name: "",
-          flatten: true,
-          schema: [
-            { name: "show_y_axis_labels", selector: { boolean: {} } },
-            { name: "show_alerts", selector: { boolean: {} } },
-            {
-              name: "max_alerts",
-              selector: {
-                select: {
-                  options: [
-                    { label: "1", value: "1" },
-                    { label: "2", value: "2" },
-                    { label: "3", value: "3" },
-                    { label: "4", value: "4" },
-                    { label: "5", value: "5" }
-                  ]
-                }
-              }
-            }
-          ]
-        }
+              selector: dropdown([["always", "Always"], ["fallback_only", "Only when hazards are quiet"]])
+            },
+            { name: "max_alerts", selector: dropdown(["1", "2", "3", "4", "5"].map((value) => [value, value])) }
+          ]),
+          row([{ name: "show_alerts", selector: { boolean: {} } }])
+        ])
       ],
-      computeLabel: (schema) => {
-        switch (schema.name) {
-          case "entity":
-            return "Configured location";
-          case "title":
-            return "Card title";
-          case "default_range":
-            return "Default range";
-          case "chart_style":
-            return "Chart style";
-          case "probability_axis_mode":
-            return "Probability axis";
-          case "temperature_axis_mode":
-            return "Temperature axis";
-          case "x_axis_labels":
-            return "X axis labels";
-          case "label_dedupe":
-            return "Value labels";
-          case "low_risk_behavior":
-            return "Quiet forecast handling";
-          case "low_risk_threshold":
-            return "Quiet forecast threshold";
-          case "temperature_display":
-            return "Temperature display";
-          case "show_y_axis_labels":
-            return "Show y axis labels";
-          case "show_alerts":
-            return "Show alert chips";
-          case "max_alerts":
-            return "Alert chip limit";
-          default:
-            return void 0;
-        }
-      },
-      computeHelper: (schema) => {
-        switch (schema.name) {
-          case "entity":
-            return "Choose the 4h chart entity for an existing Weather Risk Bridge location. To add a new location, open Settings > Devices & Services > Integrations > Weather Risk Bridge.";
-          case "title":
-            return "Overrides the card heading.";
-          case "default_range":
-            return "Sets the first horizon shown when the dashboard loads. Now / 1h appears only when minute nowcast is ready.";
-          case "chart_style":
-            return "Renders each series as a smooth line with a soft fill instead of bar columns.";
-          case "probability_axis_mode":
-            return "Adaptive is the recommended default for low-risk periods.";
-          case "temperature_axis_mode":
-            return "Fixed 20F span keeps 4h, 12h, 24h, and 48h on the same kind of temperature scale.";
-          case "x_axis_labels":
-            return "Compact shows a few time labels, full shows every label, and off gives the cleanest plot.";
-          case "label_dedupe":
-            return "Hide repeated values keeps the first label in a run and only writes the next when the value changes.";
-          case "low_risk_behavior":
-            return "Controls what happens when hazard risk stays at or below the quiet threshold.";
-          case "low_risk_threshold":
-            return "A threshold of 2 percent hides or smooths away nearly-no-risk cases.";
-          case "temperature_display":
-            return "Controls whether temperature stays visible beside hazard probabilities or only appears on quiet forecasts.";
-          case "show_y_axis_labels":
-            return "Displays the left-side scale labels for each series.";
-          case "show_alerts":
-            return "Shows active alert badges above the graph.";
-          case "max_alerts":
-            return "Limits how many active alerts are shown.";
-          default:
-            return void 0;
-        }
-      }
+      computeLabel: (schema) => ({
+        entity: "Location",
+        default_range: "Default range",
+        chart_style: "Chart style",
+        probability_axis_mode: "Probability axis",
+        temperature_axis_mode: "Temperature axis",
+        x_axis_labels: "Time labels",
+        label_dedupe: "Value labels",
+        show_y_axis_labels: "Show y-axis scale",
+        low_risk_behavior: "Quiet hazards",
+        low_risk_threshold: "Quiet threshold",
+        temperature_display: "Temperature chart",
+        max_alerts: "Alert chip limit",
+        show_alerts: "Show alert chips"
+      })[schema.name],
+      computeHelper: (schema) => ({
+        entity: "Any chart sensor of the Weather Risk Bridge location to show.",
+        default_range: "5 days appears once the companion app provides it.",
+        chart_style: "Line is smoother; bars add storm caps and hail per bar.",
+        probability_axis_mode: "Adaptive keeps low risk legible.",
+        temperature_axis_mode: "Fixed keeps ranges on one scale.",
+        low_risk_behavior: "When risk stays at or below the threshold.",
+        low_risk_threshold: "5% (default) trims low-signal noise."
+      })[schema.name]
     };
   }
   static getStubConfig(hass) {
@@ -6103,7 +5956,7 @@ var WeatherRiskBridgeCard = class extends i4 {
       showYAxisLabels: c4.show_y_axis_labels !== false,
       seriesLayout: c4.series_layout ?? DEFAULT_SERIES_LAYOUT,
       seriesColumns: c4.series_columns ?? DEFAULT_SERIES_COLUMNS,
-      chartStyle: c4.chart_style === "line" ? "line" : DEFAULT_CHART_STYLE,
+      chartStyle: c4.chart_style === "line" || c4.chart_style === "bars" ? c4.chart_style : DEFAULT_CHART_STYLE,
       lowRiskBehavior: c4.low_risk_behavior ?? DEFAULT_LOW_RISK_BEHAVIOR,
       lowRiskThreshold: c4.low_risk_threshold ?? DEFAULT_LOW_RISK_THRESHOLD,
       labelDedupe: c4.label_dedupe === true,
@@ -6121,9 +5974,17 @@ var WeatherRiskBridgeCard = class extends i4 {
     const strategic = strategicRangeValues();
     const normalizedLocation = normalizeLocationKey(this._normalizedConfig.location ?? "");
     const baseEntityId = normalizedLocation ? baseEntityIdForLocation(normalizedLocation) : deriveBaseEntityId(this._normalizedConfig.entity);
-    const availableRanges = canonical.filter(
-      (rangeHours) => Boolean(this.hass.states[entityIdForRange(baseEntityId, rangeHours)])
-    );
+    // Longer horizons need the matching companion app: a 120h sensor created by
+    // a newer integration over an older app has no series, so don't offer it.
+    const availableRanges = canonical.filter((rangeHours) => {
+      const state = this.hass.states[entityIdForRange(baseEntityId, rangeHours)];
+      if (!state) return false;
+      if (rangeHours >= 120) {
+        const series = state.attributes?.series;
+        return Array.isArray(series) && series.length > 0;
+      }
+      return true;
+    });
     // Longer horizons such as 5d are additive: show every available range except the capability-gated nowcast.
     let rangeOptions = availableRanges.filter((rangeHours) => rangeHours !== 1);
     const oneHourEntityId = entityIdForRange(baseEntityId, 1);
@@ -7706,8 +7567,10 @@ WeatherRiskBridgeCard.styles = i`
       min-width: 0;
     }
 
+    /* Wind, humidity and dew point share the row equally. */
     .hero-pill-triple {
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(0, 0.95fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
     }
 
     .hero-pill-triple .detail-pill {
@@ -9829,6 +9692,16 @@ WeatherRiskBridgeCard.styles = i`
       }
     }
 
+    /* Narrow cards: let the pill rail span both hero columns so the wind /
+       humidity / dew point row keeps room for its values. */
+    @container host-card (max-width: 544px) {
+      .card-hero-grid {
+        grid-template-areas:
+          "overview ranges"
+          "pills pills";
+      }
+    }
+
     @container host-card (max-width: 560px) {
       .card-hero {
         padding: 14px;
@@ -9970,7 +9843,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
               >
                 <option value="">Select a Weather Risk Bridge location</option>
                 ${locationOptions.map(
-        (option) => b2`<option value=${option.key}>${option.label}</option>`
+        (option) => b2`<option value=${option.key} ?selected=${option.key === (config.location ?? "")}>${option.label}</option>`
       )}
               </select>
               <div class="help">
@@ -9997,7 +9870,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
               <select id="entity" .value=${config.entity} @change=${this._handleEntityChange}>
                 <option value="">Select a Weather Risk chart entity</option>
                 ${entityOptions.map(
-        (entityId) => b2`<option value=${entityId}>${entityId}</option>`
+        (entityId) => b2`<option value=${entityId} ?selected=${entityId === config.entity}>${entityId}</option>`
       )}
               </select>
               <div class="help">
@@ -10013,20 +9886,6 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
           </div>
 
           <div class="field">
-            <label for="title">Card title</label>
-            <input
-              id="title"
-              type="text"
-              .value=${config.title ?? ""}
-              placeholder="Weather Risk"
-              @input=${this._handleTitleInput}
-            />
-            <div class="help">
-              Overrides the card heading. Leave blank to use the built-in title.
-            </div>
-          </div>
-
-          <div class="field">
             <label for="default_range">Default range</label>
             <select
               id="default_range"
@@ -10035,14 +9894,14 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
             >
               ${rangeValues().map(
         (value) => b2`
-                  <option value=${String(value)}>
+                  <option value=${String(value)} ?selected=${value === (config.default_range ?? DEFAULT_RANGE)}>
                     ${rangeOptionLabel(value)}
                   </option>
                 `
       )}
             </select>
             <div class="help">
-              Sets the first horizon shown when the dashboard loads. Now / 1h is capability-gated and will fall back to a strategic range when minute nowcast is unavailable.
+              First horizon shown when the dashboard loads (12h recommended). Now / 1h appears only when minute nowcast data is available, and 5 days only once the companion app provides the 120h forecast.
             </div>
           </div>
 
@@ -10053,11 +9912,11 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
               .value=${config.chart_style ?? DEFAULT_CHART_STYLE}
               @change=${this._handleChartStyleChange}
             >
+              <option value="line">Line (smooth curves)</option>
               <option value="bars">Bars (columns)</option>
-              <option value="line">Line</option>
             </select>
             <div class="help">
-              Line mode renders each series as a smooth curve with a soft fill instead of bar columns. Bars stay the default.
+              Line (default) draws each series as a smooth curve with a soft fill. Bars show discrete columns with storm caps and per-bar hail markers.
             </div>
           </div>
 
@@ -10136,11 +9995,11 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
               @change=${this._handleLowRiskThresholdChange}
             >
               ${[0, 1, 2, 5, 10].map(
-        (value) => b2`<option value=${String(value)}>${value}%</option>`
+        (value) => b2`<option value=${String(value)} ?selected=${value === (config.low_risk_threshold ?? DEFAULT_LOW_RISK_THRESHOLD)}>${value}%</option>`
       )}
             </select>
             <div class="help">
-              A threshold of 2 percent hides or smooths away the nearly-no-risk cases without erasing meaningful signals.
+              The 5 percent default hides low-signal hazards without erasing meaningful ones.
             </div>
           </div>
 
@@ -10242,7 +10101,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
               @change=${this._handleMaxAlertsChange}
             >
               ${[1, 2, 3, 4, 5].map(
-        (value) => b2`<option value=${String(value)}>${value}</option>`
+        (value) => b2`<option value=${String(value)} ?selected=${value === (config.max_alerts ?? DEFAULT_MAX_ALERTS)}>${value}</option>`
       )}
             </select>
             <div class="help">
@@ -10474,10 +10333,6 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
       location
     });
   }
-  _handleTitleInput(event) {
-    const target = event.currentTarget;
-    this._updateConfig({ title: target.value });
-  }
   _handleRangeChange(event) {
     const target = event.currentTarget;
     this._updateConfig({ default_range: Number(target.value) });
@@ -10488,7 +10343,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
   }
   _handleChartStyleChange(event) {
     const target = event.currentTarget;
-    this._updateConfig({ chart_style: target.value === "line" ? "line" : DEFAULT_CHART_STYLE });
+    this._updateConfig({ chart_style: target.value === "bars" ? "bars" : "line" });
   }
   _handleSeriesColumnsChange(event) {
     const target = event.currentTarget;
