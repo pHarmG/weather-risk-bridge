@@ -1,12 +1,16 @@
 # Changelog
 
+## 0.2.3
+
+- Restore the hero layout: the wind, humidity, dew point and UVI pills stay in the left column again on cards narrower than 545px, keeping the lower-right open so the weather scene shows. 0.2.2 had stretched them across the full hero. On narrower cards the pills now tighten (smaller icon, padding and value text) so values still fit; only phone-width cards (450px and below) let the row span the full width.
+
 ## 0.2.2
 
 - Rebuilt the visual card editor: settings are grouped into View, Axes and labels, and Hazards and alerts sections, with every choice shown as a dropdown in aligned two-column rows and concise help text. The unused "Card title" field is gone.
 - Fixed the editor's Quiet threshold and Alert chip limit having no effect: the editor saves them as text and the card previously ignored that, falling back to its defaults.
 - New defaults for a smoother, more readable card: line charts, 12-hour starting range, and a 5% quiet-hazard threshold. Existing explicit settings, including `chart_style: bars`, are kept.
 - The 5d range is only offered once the 120h forecast actually has data, so a newer integration paired with an older companion app no longer shows an empty 5-day chart.
-- Wind, humidity and dew point pills share the hero row equally, and on narrower cards the pill row spans the full hero width so values are no longer cut off.
+- Wind, humidity and dew point pills share the hero row equally.
 
 ## 0.2.1
 

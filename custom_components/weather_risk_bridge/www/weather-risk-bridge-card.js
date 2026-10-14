@@ -9692,9 +9692,29 @@ WeatherRiskBridgeCard.styles = i`
       }
     }
 
-    /* Narrow cards: let the pill rail span both hero columns so the wind /
-       humidity / dew point row keeps room for its values. */
-    @container host-card (max-width: 544px) {
+    /* The conditions row stays in the hero's left column (the lower-right is
+       left open so the weather scene shows). On narrower cards the pills
+       tighten instead of spreading across the scene. */
+    @container host-card (max-width: 560px) {
+      .hero-pill-triple .detail-pill {
+        padding-inline: 6px 7px;
+        gap: 4px;
+      }
+
+      .hero-pill-triple .detail-pill ha-icon {
+        --mdc-icon-size: 18px;
+      }
+    }
+
+    @container host-card (max-width: 480px) {
+      .hero-pill-triple .detail-pill-value {
+        font-size: 0.72rem;
+      }
+    }
+
+    /* Phones: the left column is too narrow for three readable pills, so the
+       row takes the full hero width only here. */
+    @container host-card (max-width: 450px) {
       .card-hero-grid {
         grid-template-areas:
           "overview ranges"
