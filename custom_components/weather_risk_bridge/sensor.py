@@ -110,6 +110,13 @@ class WeatherRiskBridgeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}-{spec.unique_key}"
         self._attr_name = spec.name
         self._attr_icon = spec.icon
+        # Pin the entity id for newly created entities. Recent Home Assistant
+        # releases otherwise prefix the device name (sensor.home_weather_...),
+        # which breaks the card's location-based lookup. Existing registry
+        # entries keep whatever id they already have.
+        self.entity_id = (
+            f"sensor.weather_risk_bridge_{entry.runtime_data.slug}_{spec.object_id_suffix}"
+        )
 
     @property
     def suggested_object_id(self) -> str | None:

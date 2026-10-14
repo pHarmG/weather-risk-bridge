@@ -34,6 +34,8 @@ class WeatherRiskBridgeWeather(CoordinatorEntity, WeatherEntity):
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}-weather"
         self._attr_name = f"{entry.runtime_data.title} Weather"
+        # See sensor.py: pin the id so new entities don't get a device prefix.
+        self.entity_id = f"weather.weather_risk_bridge_{entry.runtime_data.slug}"
 
     @property
     def suggested_object_id(self) -> str | None:

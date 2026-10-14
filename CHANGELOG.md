@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.5
+
+- Fix the card not finding sensors whose entity ids carry a device-name prefix. Recent Home Assistant releases create new entities as `sensor.home_weather_risk_bridge_home_chart_120h` rather than `sensor.weather_risk_bridge_home_chart_120h`, so the 5d range never appeared on existing locations (their new 120h sensor got the prefix) and locations added recently could not be found by `location:` at all. The card now resolves chart, nowcast and weather entities with or without the prefix, and the editor lists prefixed locations too.
+- New sensors and weather entities created by the integration get the unprefixed `…weather_risk_bridge_<location>…` id again. Existing entities keep their current ids.
+
 ## 0.2.4
 
 - Renamed to **Weather Risk Suite** everywhere you see it: the integration, the companion app, the card picker, setup dialogs, and docs. Internal identifiers are unchanged (`weather_risk_bridge` domain, `sensor.weather_risk_bridge_*` entities, `custom:weather-risk-bridge-card`), so existing dashboards and automations keep working. App discovery recognises both the old and new names.

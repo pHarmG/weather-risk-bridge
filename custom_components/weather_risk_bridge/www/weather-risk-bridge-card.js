@@ -936,6 +936,33 @@ function weatherEntityIdForLocation(location) {
   const locationKey = normalizeLocationKey(location);
   return locationKey ? `${WEATHER_RISK_BRIDGE_WEATHER_PREFIX}${locationKey}` : "";
 }
+// Newer Home Assistant releases prefix the device name onto newly created
+// entity ids (sensor.home_weather_risk_bridge_home_chart_120h), while older
+// entities keep sensor.weather_risk_bridge_home_chart_120h. Resolve the
+// canonical id against the live states, accepting any such prefix.
+var _prefixedEntityCache = /* @__PURE__ */ new WeakMap();
+function resolveStateEntityId(states, entityId) {
+  if (!entityId || !states || states[entityId]) return entityId;
+  const marker = "weather_risk_bridge_";
+  const dot = entityId.indexOf(".");
+  const markerAt = entityId.indexOf(marker);
+  if (dot < 0 || markerAt < 0) return entityId;
+  const domain = entityId.slice(0, dot);
+  const tail = entityId.slice(markerAt);
+  let cache = _prefixedEntityCache.get(states);
+  if (!cache) {
+    cache = /* @__PURE__ */ new Map();
+    _prefixedEntityCache.set(states, cache);
+  }
+  if (cache.has(entityId)) return cache.get(entityId);
+  const wanted = `_${tail}`;
+  const match = Object.keys(states).find(
+    (candidate) => candidate.startsWith(`${domain}.`) && candidate.endsWith(wanted)
+  );
+  const resolved = match ?? entityId;
+  cache.set(entityId, resolved);
+  return resolved;
+}
 function fingerprintHassEntity(entity) {
   if (!entity) {
     return "missing";
@@ -952,9 +979,12 @@ function fingerprintWeatherRiskHassData(input) {
   const states = input.hass?.states ?? {};
   const normalizedLocation = input.location ? normalizeLocationKey(input.location) : "";
   const baseEntityId = normalizedLocation ? baseEntityIdForLocation(normalizedLocation) : input.entity ? deriveBaseEntityId(input.entity) : "";
-  const chartEntityId = normalizedLocation ? chartEntityIdForLocation(normalizedLocation, input.selectedRange) : input.entity ? entityIdForRange(baseEntityId, input.selectedRange) : "";
-  const weatherEntityId = input.weatherEntity || (normalizedLocation ? weatherEntityIdForLocation(normalizedLocation) : chartEntityId ? deriveWeatherEntityId(chartEntityId) : "");
-  const strategicContextId = input.selectedRange === 1 && baseEntityId ? entityIdForRange(baseEntityId, 4) : "";
+  const chartEntityIdRaw = normalizedLocation ? chartEntityIdForLocation(normalizedLocation, input.selectedRange) : input.entity ? entityIdForRange(baseEntityId, input.selectedRange) : "";
+  const weatherEntityIdRaw = input.weatherEntity || (normalizedLocation ? weatherEntityIdForLocation(normalizedLocation) : chartEntityIdRaw ? deriveWeatherEntityId(chartEntityIdRaw) : "");
+  const strategicContextIdRaw = input.selectedRange === 1 && baseEntityId ? entityIdForRange(baseEntityId, 4) : "";
+  const chartEntityId = resolveStateEntityId(states, chartEntityIdRaw);
+  const weatherEntityId = resolveStateEntityId(states, weatherEntityIdRaw);
+  const strategicContextId = resolveStateEntityId(states, strategicContextIdRaw);
   return [
     chartEntityId,
     fingerprintHassEntity(states[chartEntityId]),
@@ -966,17 +996,12 @@ function fingerprintWeatherRiskHassData(input) {
 }
 function deriveLocationKeyFromEntityId(entityId) {
   const baseEntityId = deriveBaseEntityId(entityId);
-  if (!baseEntityId.startsWith(WEATHER_RISK_BRIDGE_SENSOR_PREFIX)) {
-    return "";
-  }
-  return baseEntityId.slice(WEATHER_RISK_BRIDGE_SENSOR_PREFIX.length);
+  const match = /^sensor\.(?:[a-z0-9_]+?_)?weather_risk_bridge_(.+)$/.exec(baseEntityId);
+  return match ? match[1] : "";
 }
 function deriveWeatherEntityId(chartEntityId) {
-  const baseEntityId = deriveBaseEntityId(chartEntityId);
-  return baseEntityId.replace(
-    /^sensor\.weather_risk_bridge_/,
-    WEATHER_RISK_BRIDGE_WEATHER_PREFIX
-  );
+  const locationKey = deriveLocationKeyFromEntityId(chartEntityId);
+  return locationKey ? `${WEATHER_RISK_BRIDGE_WEATHER_PREFIX}${locationKey}` : "";
 }
 function fahrenheitToCelsius(temperatureF) {
   return (temperatureF - 32) / 1.8;
@@ -1011,7 +1036,7 @@ function strategicRangeValues() {
   return [4, 12, 24, 48];
 }
 function cardEntityOptions(states) {
-  return Object.keys(states).filter((entityId) => /^sensor\.weather_risk_bridge_.+_chart_4h$/.test(entityId)).sort();
+  return Object.keys(states).filter((entityId) => /^sensor\.(?:[a-z0-9_]+_)?weather_risk_bridge_.+_chart_4h$/.test(entityId)).sort();
 }
 function cardLocationOptions(states) {
   return cardEntityOptions(states).map((entityId) => {
@@ -1593,11 +1618,12 @@ function formatForecastWindow(point) {
 function resolveEntityBundle(locationKey, entityId, weatherEntityIdOverride, hass, selectedRange) {
   const issues = [];
   const normalizedLocation = locationKey ? normalizeLocationKey(locationKey) : "";
-  const baseEntityId = normalizedLocation ? baseEntityIdForLocation(normalizedLocation) : deriveBaseEntityId(entityId);
-  const chartEntityId = normalizedLocation ? chartEntityIdForLocation(normalizedLocation, selectedRange) : entityIdForRange(baseEntityId, selectedRange);
-  const strategicContextChartEntityId = selectedRange === 1 ? entityIdForRange(baseEntityId, 4) : null;
-  const resolvedWeatherId = weatherEntityIdOverride ?? (normalizedLocation ? weatherEntityIdForLocation(normalizedLocation) : deriveWeatherEntityId(entityId));
-  const inferredKey = normalizedLocation || baseEntityId.replace(/^sensor\.weather_risk_bridge_/, "").replace(/_chart_\d+h$/, "");
+  const effectiveLocation = normalizedLocation || deriveLocationKeyFromEntityId(entityId);
+  const baseEntityId = effectiveLocation ? baseEntityIdForLocation(effectiveLocation) : deriveBaseEntityId(entityId);
+  const chartEntityId = resolveStateEntityId(hass.states, entityIdForRange(baseEntityId, selectedRange));
+  const strategicContextChartEntityId = selectedRange === 1 ? resolveStateEntityId(hass.states, entityIdForRange(baseEntityId, 4)) : null;
+  const resolvedWeatherId = weatherEntityIdOverride ?? resolveStateEntityId(hass.states, effectiveLocation ? weatherEntityIdForLocation(effectiveLocation) : deriveWeatherEntityId(entityId));
+  const inferredKey = effectiveLocation;
   const resolved = {
     chartEntityId,
     weatherEntityId: resolvedWeatherId,
@@ -5973,11 +5999,12 @@ var WeatherRiskBridgeCard = class extends i4 {
     const canonical = rangeValues();
     const strategic = strategicRangeValues();
     const normalizedLocation = normalizeLocationKey(this._normalizedConfig.location ?? "");
-    const baseEntityId = normalizedLocation ? baseEntityIdForLocation(normalizedLocation) : deriveBaseEntityId(this._normalizedConfig.entity);
+    const effectiveLocation = normalizedLocation || deriveLocationKeyFromEntityId(this._normalizedConfig.entity ?? "");
+    const baseEntityId = effectiveLocation ? baseEntityIdForLocation(effectiveLocation) : deriveBaseEntityId(this._normalizedConfig.entity);
     // Longer horizons need the matching companion app: a 120h sensor created by
     // a newer integration over an older app has no series, so don't offer it.
     const availableRanges = canonical.filter((rangeHours) => {
-      const state = this.hass.states[entityIdForRange(baseEntityId, rangeHours)];
+      const state = this.hass.states[resolveStateEntityId(this.hass.states, entityIdForRange(baseEntityId, rangeHours))];
       if (!state) return false;
       if (rangeHours >= 120) {
         const series = state.attributes?.series;
@@ -5988,7 +6015,7 @@ var WeatherRiskBridgeCard = class extends i4 {
     // Longer horizons such as 5d are additive: show every available range except the capability-gated nowcast.
     let rangeOptions = availableRanges.filter((rangeHours) => rangeHours !== 1);
     const oneHourEntityId = entityIdForRange(baseEntityId, 1);
-    const oneHourState = this.hass.states[oneHourEntityId];
+    const oneHourState = this.hass.states[resolveStateEntityId(this.hass.states, oneHourEntityId)];
     const oneHourMode = oneHourState ? assessOneHourNowcastModeFromAttributes(oneHourState.attributes ?? {}) : "missing_data";
     if (oneHourState && oneHourMode === "ready") {
       const visibleSet = /* @__PURE__ */ new Set([1, ...rangeOptions]);
