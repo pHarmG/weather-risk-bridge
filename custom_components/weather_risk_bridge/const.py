@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 DOMAIN = "weather_risk_bridge"
-VERSION = "0.1.9"
+VERSION = "0.2.0"
 PLATFORMS = ["sensor", "weather"]
 
 CONF_SERVICE_URL = "service_url"
@@ -23,7 +23,7 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=5)
 FRONTEND_URL_BASE = f"/{DOMAIN}"
 CARD_FILENAME = "weather-risk-bridge-card.js"
 
-HORIZONS = (1, 4, 12, 24, 48)
+HORIZONS = (1, 4, 12, 24, 48, 120)
 RISK_KEYS = ("rain", "storm", "strong_wind", "hail", "tornado")
 
 

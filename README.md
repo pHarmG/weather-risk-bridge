@@ -22,7 +22,7 @@ Most HA weather cards answer “what’s the temperature?” Weather Risk Bridge
 
 - **Risk, not just conditions** — rain chance, thunderstorm probability, strong-wind thresholds, hail & tornado outlook from SPC, plus NWS alerts — in one card.
 - **Your pin on the map** — you enter latitude/longitude once. Cabins, farms, and second homes work the same as “home.”
-- **Glanceable horizons** — switch `1h` / `4h` / `12h` / `24h` / `48h` without leaving the dashboard. Minute-scale nowcast when the service has it.
+- **Glanceable horizons** — switch `1h` / `4h` / `12h` / `24h` / `48h` / `5d` without leaving the dashboard. Minute-scale nowcast when the service has it.
 - **Ambient stage UI** — daylight/night and weather-aware backdrop so the card reads like a product, not a sensor dump.
 - **HAOS-native app** — on Home Assistant OS / Supervised, install from the App store, leave the auto-discovered service URL, done. Docker on another host is fully supported if you prefer.
 

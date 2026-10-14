@@ -1,5 +1,5 @@
 name: Weather Risk Bridge
-version: "0.1.0"
+version: "0.2.0"
 slug: weather_risk_bridge
 description: >
   NOAA/SPC companion API for the Weather Risk Bridge Home Assistant integration

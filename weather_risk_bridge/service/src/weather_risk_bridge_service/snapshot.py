@@ -34,7 +34,7 @@ OPEN_METEO_FORECAST_URL = (
     "?latitude={lat}&longitude={lon}"
     "&current=uv_index,is_day,precipitation_probability,rain,showers,snowfall,precipitation,weather_code"
     "&hourly=uv_index,is_day,precipitation_probability,rain,showers,snowfall,precipitation,weather_code"
-    "&forecast_hours=48"
+    "&forecast_hours=120"
     "&precipitation_unit=mm"
     "&timezone=GMT"
 )
@@ -71,12 +71,17 @@ HAZARD_UNITS = {
     "temperature": "degF",
 }
 
+HOURLY_WINDOW_HOURS = 120
+DAILY_FORECAST_DAYS = 5
+HORIZONS = (1, 4, 12, 24, 48, 120)
+
 HORIZON_BINS = {
     1: 1,
     4: 1,
     12: 1,
     24: 2,
     48: 3,
+    120: 6,
 }
 
 NOWCAST_BUCKET_MINUTES = 15
@@ -1313,6 +1318,33 @@ def _hourly_hail_probability_from_nws(
     return round_value(min(thunder, 100.0), 1)
 
 
+def _apply_spc_hail_estimates(hours: list[dict[str, Any]], hail_matches: list[Any]) -> None:
+    """Estimate hourly hail chance by shaping SPC hail outlooks with storm chance.
+
+    SPC hail probabilities cover a whole outlook day (1"+ hail within 25 miles),
+    not an hour. Within each outlook window the hour with the highest storm
+    probability receives the full SPC value and other hours scale down in
+    proportion, so the estimate never exceeds what SPC issued.
+    """
+    for hour in hours:
+        hour["hail_estimate_probability"] = 0.0
+    for match in hail_matches:
+        percent = float(getattr(match, "probability_percent", 0.0) or 0.0)
+        if percent <= 0:
+            continue
+        window = [
+            hour
+            for hour in hours
+            if match.valid_start <= ensure_utc(datetime.fromisoformat(hour["start"])) < match.valid_end
+        ]
+        storm_peak = max((hour["storm_probability"] for hour in window), default=0.0)
+        if storm_peak <= 0:
+            continue
+        for hour in window:
+            estimate = round_value(percent * hour["storm_probability"] / storm_peak, 1)
+            hour["hail_estimate_probability"] = max(hour["hail_estimate_probability"], estimate)
+
+
 def _resolve_nowcast_hail_tornado_maxima() -> tuple[float, float]:
     # Minute nowcast models rain/storm timing only. Strategic SPC hail/tornado
     # belongs on longer horizons, not the 1h precipitation surface.
@@ -1737,7 +1769,7 @@ class SnapshotBuilder:
     ) -> dict[str, Any]:
         local_timezone = point["properties"]["timeZone"]
         now = datetime.now(UTC)
-        timeline = [ensure_utc(item) for item in hourly_timeline(now, 48)]
+        timeline = [ensure_utc(item) for item in hourly_timeline(now, HOURLY_WINDOW_HOURS)]
         grid_properties = grid["properties"]
         wind_field = WIND_THRESHOLD_FIELD[wind_threshold_mph]
 
@@ -1791,7 +1823,7 @@ class SnapshotBuilder:
         weather_values = _expand_optional_grid(grid_properties, "weather", timeline)
         annotations = _weather_annotations(weather_values)
 
-        hourly_periods = hourly_forecast["properties"]["periods"][:48]
+        hourly_periods = hourly_forecast["properties"]["periods"][:HOURLY_WINDOW_HOURS]
         severe_hourly = self._build_severe_hourly(timeline, severe_matches)
         alerts_payload = self._build_alerts_payload(alerts)
 
@@ -1862,6 +1894,7 @@ class SnapshotBuilder:
                     "annotation_damaging_wind": annotations[index]["damaging_wind"],
                 }
             )
+        _apply_spc_hail_estimates(hours, severe_matches.get("hail", []))
 
         current_period = _forecast_period_for_bucket(hourly_periods, timeline[0]) if timeline else {}
         current_humidity = ((current_period.get("relativeHumidity", {}) or {}).get("value"))
@@ -1925,7 +1958,7 @@ class SnapshotBuilder:
 
         spc_hail_outlook = _spc_hail_outlook_peak(severe_matches)
         horizons: dict[str, dict[str, Any]] = {}
-        for hours_value in (1, 4, 12, 24, 48):
+        for hours_value in HORIZONS:
             horizon = self._build_horizon(
                 hours,
                 hours_value,
@@ -2040,7 +2073,7 @@ class SnapshotBuilder:
             by_day[day].append(hour)
 
         forecast: list[dict[str, Any]] = []
-        for day, items in list(by_day.items())[:3]:
+        for day, items in list(by_day.items())[:DAILY_FORECAST_DAYS]:
             forecast.append(
                 {
                     "datetime": f"{day}T00:00:00+00:00",
@@ -2306,7 +2339,10 @@ class SnapshotBuilder:
             for index in range(0, len(horizon_items), bin_hours)
         ]
         series: list[dict[str, Any]] = []
-        for key in ("temperature", "rain", "storm", "strong_wind", "tornado"):
+        # Hail: value is the SPC-shaped estimate (_apply_spc_hail_estimates) and
+        # `flagged` marks NWS large-hail/text signals. The card overlays it on the
+        # precipitation chart rather than giving it a panel.
+        for key in ("temperature", "rain", "storm", "strong_wind", "hail", "tornado"):
             points: list[dict[str, Any]] = []
             for items in bins:
                 start = items[0]["start"]
@@ -2326,6 +2362,8 @@ class SnapshotBuilder:
                     value = max_or_zero(item["storm_probability"] for item in items)
                 elif key == "strong_wind":
                     value = max_or_zero(item["strong_wind_probability"] for item in items)
+                elif key == "hail":
+                    value = max_or_zero(item.get("hail_estimate_probability", 0.0) for item in items)
                 else:
                     value = max_or_zero(item["tornado_probability"] for item in items)
                 point = {
@@ -2337,6 +2375,8 @@ class SnapshotBuilder:
                     point["apparent_value"] = round_value(average_or_zero(apparent_values), 1)
                 if key == "temperature":
                     point["condition"] = _representative_condition(items)
+                if key == "hail":
+                    point["flagged"] = any(item.get("hail_probability", 0.0) > 0 for item in items)
                 points.append(point)
             series.append(
                 {

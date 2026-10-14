@@ -2,7 +2,7 @@
 
 **US weather risk for the coordinates you care about** — NWS + SPC → Home Assistant app → Lovelace card.
 
-Most weather cards show temperature. This one answers whether rain, storms, wind, hail, or tornado outlook matter **at your pin** over the next 1–48 hours.
+Most weather cards show temperature. This one answers whether rain, storms, wind, hail, or tornado outlook matter **at your pin** over the next 1–48 hours, with a 5-day view when you want the full week ahead.
 
 ![Weather Risk Bridge card previews](docs/media/hero-banner.webp)
 

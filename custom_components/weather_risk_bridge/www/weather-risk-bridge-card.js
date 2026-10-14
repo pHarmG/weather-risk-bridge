@@ -999,13 +999,13 @@ function formatTemperatureRange(minTemperatureF, maxTemperatureF) {
   return `${roundedMin}\xB0-${roundedMax}\xB0F`;
 }
 function deriveBaseEntityId(entityId) {
-  return entityId.replace(/_chart_(1|4|12|24|48)h$/, "");
+  return entityId.replace(/_chart_(1|4|12|24|48|120)h$/, "");
 }
 function entityIdForRange(baseEntityId, rangeHours) {
   return `${baseEntityId}_chart_${rangeHours}h`;
 }
 function rangeValues() {
-  return [1, 4, 12, 24, 48];
+  return [1, 4, 12, 24, 48, 120];
 }
 function strategicRangeValues() {
   return [4, 12, 24, 48];
@@ -1039,8 +1039,11 @@ var PLOT_LEFT_NO_AXIS = 28;
 var AXIS_LABEL_END_GAP = 4;
 var AXIS_LABEL_OUTER_PADDING = 8;
 function resolveValueLabelX(centerX, plotLeft, width, plotRight, count) {
-  const inset = count <= 12 ? 12 : count <= 24 ? 16 : 18;
-  return clamp2(centerX, plotLeft + inset, width - plotRight - inset);
+  // Keep labels centred on their bar/point; only clamp enough that a ~3-digit
+  // label can't spill out of the SVG. (Clamping to the plot edges pushed the
+  // first and last labels off their bars.)
+  const halfLabel = 12;
+  return clamp2(centerX, halfLabel, width - halfLabel);
 }
 function roundTick(value) {
   if (value >= 100) {
@@ -1234,6 +1237,46 @@ function formatXAxisLabel(value, mode, index, total) {
     hour12: true
   });
 }
+function buildDayColumn(startDate, leftX, rightX) {
+  return {
+    label: startDate.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }),
+    center: (leftX + rightX) / 2,
+    width: rightX - leftX
+  };
+}
+function buildDayColumnLayout(points, bars, model) {
+  if (points.length === 0 || bars.length !== points.length) {
+    return { columns: [], separators: [] };
+  }
+  const columns = [];
+  const separators = [];
+  let segmentLeft = model.plotLeft;
+  let segmentStartDate = new Date(points[0].start);
+  if (Number.isNaN(segmentStartDate.getTime())) {
+    return { columns: [], separators: [] };
+  }
+  for (let index = 0; index < points.length; index += 1) {
+    const startMs = new Date(points[index].start).getTime();
+    const endMs = new Date(points[index].end).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+    const bar = bars[index];
+    const span = endMs - startMs;
+    const midnight = new Date(startMs);
+    midnight.setHours(0, 0, 0, 0);
+    if (midnight.getTime() <= startMs) {
+      midnight.setDate(midnight.getDate() + 1);
+    }
+    if (midnight.getTime() <= endMs) {
+      const separatorX = bar.x + ((midnight.getTime() - startMs) / span) * bar.width;
+      separators.push(separatorX);
+      columns.push(buildDayColumn(segmentStartDate, segmentLeft, separatorX));
+      segmentLeft = separatorX;
+      segmentStartDate = new Date(midnight);
+    }
+  }
+  columns.push(buildDayColumn(segmentStartDate, segmentLeft, model.width - model.plotRight));
+  return { columns, separators };
+}
 function buildAxisSpec(series, options) {
   if (series.key === "temperature") {
     const actualValues = series.points.map((point) => Number(point.value ?? 0));
@@ -1325,7 +1368,7 @@ function buildSvgChartModel(series, options) {
   const isMinuteTimelineSeries = shouldUseMinuteTimelineLabels(series, cadenceMinutes);
   const baselineY = SVG_HEIGHT - PLOT_BOTTOM;
   const gap = isMinuteTimelineSeries ? 3 : count <= 4 ? 14 : count <= 6 ? 12 : 10;
-  const denseBarWidth = isMinuteTimelineSeries ? 12 : count <= 12 ? null : count <= 24 ? 32 : 28;
+  const denseBarWidth = isMinuteTimelineSeries ? 12 : null;
   const width = count <= 4 ? SHORT_RANGE_SVG_WIDTH : denseBarWidth ? Math.max(BASE_SVG_WIDTH, plotLeft + plotRight + count * denseBarWidth + gap * (count - 1)) : BASE_SVG_WIDTH;
   const usableWidth = width - plotLeft - plotRight;
   const minBarWidth = isMinuteTimelineSeries ? 6 : 8;
@@ -1341,8 +1384,8 @@ function buildSvgChartModel(series, options) {
     const rawY = scaleY(value, axis, PLOT_TOP, baselineY);
     const height = Math.max(baselineY - rawY, value > axis.min ? 6 : 0);
     const y3 = baselineY - height;
-    const label = isMinuteTimelineSeries && cadenceMinutes ? formatMinuteTimelineXAxisLabel(options.xAxisLabels, index, series.points.length, cadenceMinutes) : formatXAxisLabel(point.start, options.xAxisLabels, index, series.points.length);
     const centerX = x2 + barWidth / 2;
+    const label = isMinuteTimelineSeries && cadenceMinutes ? formatMinuteTimelineXAxisLabel(options.xAxisLabels, index, series.points.length, cadenceMinutes) : formatXAxisLabel(point.start, options.xAxisLabels, index, series.points.length);
     return {
       index,
       value,
@@ -1351,8 +1394,11 @@ function buildSvgChartModel(series, options) {
       y: y3,
       width: barWidth,
       height,
+      lineY: rawY,
+      centerX,
       valueX: resolveValueLabelX(centerX, plotLeft, width, plotRight, count),
       valueY: clamp2(y3 - 10, PLOT_TOP + 10, baselineY - 10),
+      lineValueY: clamp2(rawY - 10, PLOT_TOP + 10, baselineY - 10),
       xLabelX: centerX,
       xLabelY: SVG_HEIGHT - 10
     };
@@ -1397,6 +1443,12 @@ function findCurrentPointIndex(series, referenceTime = /* @__PURE__ */ new Date(
   }
   return series.points.length > 0 ? nearestIndex : null;
 }
+// "79°" centred with text-anchor=middle puts the digits left of centre by half
+// the degree glyph. Shift by that half-width (in the label's own em) so the
+// digits sit on the bar centre whatever the font size.
+function degreeLabelDx(display) {
+  return String(display ?? "").endsWith("°") ? "0.16em" : "0";
+}
 function buildFeelsLikeMarkers(series, model) {
   if (series.key !== "temperature") {
     return [];
@@ -1411,7 +1463,9 @@ function buildFeelsLikeMarkers(series, model) {
       return [];
     }
     const bar = model.bars[index];
-    const inset = Math.min(Math.max(bar.width * 0.14, 6), 12);
+    // Span the full bar like the storm caps; inset only by the round linecap
+    // radius (stroke-width 4.5 / 2) so the cap ends sit on the bar edges.
+    const inset = Math.min(2.25, bar.width / 2);
     const markerY = clamp2(
       scaleY(apparentValue, model.axis, model.plotTop, model.baselineY),
       model.plotTop + 4,
@@ -1454,6 +1508,60 @@ function buildTopRoundedBarPath(bar) {
     `L ${x2 + width} ${bottom}`,
     "Z"
   ].join(" ");
+}
+function buildMonotoneCubicPath(points) {
+  const count = points.length;
+  if (count === 0) {
+    return "";
+  }
+  if (count <= 2) {
+    return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  }
+  const slopes = [];
+  for (let index = 0; index < count - 1; index += 1) {
+    const dx = points[index + 1].x - points[index].x;
+    const dy = points[index + 1].y - points[index].y;
+    slopes.push(dx === 0 ? 0 : dy / dx);
+  }
+  const tangents = [slopes[0]];
+  for (let index = 1; index < count - 1; index += 1) {
+    const previous = slopes[index - 1];
+    const next = slopes[index];
+    if (previous * next <= 0) {
+      tangents.push(0);
+      continue;
+    }
+    const w1 = 2 * next + previous;
+    const w2 = next + 2 * previous;
+    tangents.push((w1 + w2) / (w1 / previous + w2 / next));
+  }
+  tangents.push(slopes[count - 2]);
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 0; index < count - 1; index += 1) {
+    const x0 = points[index].x;
+    const y0 = points[index].y;
+    const x1 = points[index + 1].x;
+    const y1 = points[index + 1].y;
+    const span = x1 - x0;
+    path += ` C ${x0 + span / 3} ${y0 + tangents[index] * span / 3} ${x1 - span / 3} ${y1 - tangents[index + 1] * span / 3} ${x1} ${y1}`;
+  }
+  return path;
+}
+function buildLineSeriesLayout(bars, options = {}) {
+  const baselineY = options.baselineY ?? SVG_HEIGHT - PLOT_BOTTOM;
+  const points = bars.map((bar) => ({
+    x: bar.centerX,
+    y: bar.lineY,
+    isCurrent: bar.isCurrent === true
+  }));
+  const path = buildMonotoneCubicPath(points);
+  if (!path) {
+    return null;
+  }
+  const first = points[0];
+  const last = points[points.length - 1];
+  const areaPath = points.length > 1 ? `${path} L ${last.x} ${baselineY} L ${first.x} ${baselineY} Z` : "";
+  return { path, areaPath, points };
 }
 
 // src/forecast-temperature.ts
@@ -1593,7 +1701,8 @@ function parseRawRiskPoint(raw, index, riskKey) {
     endISO,
     startMs: parseMs(startISO),
     endMs: parseMs(endISO),
-    probability: Math.max(0, Math.min(100, probability))
+    probability: Math.max(0, Math.min(100, probability)),
+    flagged: raw.flagged === true
   };
 }
 function isKnownRiskKind(key) {
@@ -1799,8 +1908,6 @@ function buildCardDomainModel(bundle, options) {
           maxApparentF: apparentTemps.length > 0 ? Math.max(...apparentTemps) : null
         };
       }
-    } else if (key === "hail") {
-      continue;
     } else {
       const points = [];
       for (let i7 = 0; i7 < rawPoints.length; i7++) {
@@ -3241,6 +3348,143 @@ function buildAlignedRiskSeriesBridge(source, target) {
     }))
   };
 }
+function buildAlignedHailSeriesBridge(source, hail) {
+  const byStart = new Map(hail.points.map((pt) => [pt.startISO, pt]));
+  return {
+    key: "hail",
+    label: hail.displayLabel,
+    unit: "%",
+    points: source.points.map((pt, index) => {
+      const match = byStart.get(pt.startISO) ?? hail.points[index];
+      return {
+        start: pt.startISO,
+        end: pt.endISO,
+        value: match?.probability ?? 0,
+        flagged: match?.flagged === true
+      };
+    })
+  };
+}
+// Wind shading deepens with probability: pale sage for a breeze-level signal,
+// saturated teal for a strong one. Tornado uses the conventional magenta.
+var WIND_SHADE_STOPS = [
+  [0, [190, 214, 206]],
+  [25, [128, 206, 188]],
+  [50, [56, 186, 160]],
+  [75, [20, 150, 132]],
+  [100, [12, 108, 104]]
+];
+var TORNADO_SHADE_STOPS = [
+  [0, [222, 180, 236]],
+  [30, [200, 110, 226]],
+  [60, [168, 62, 200]],
+  [100, [118, 28, 150]]
+];
+function interpolateShade(stops, value) {
+  const v = clampValue(Number(value) || 0, 0, 100);
+  for (let i7 = 1; i7 < stops.length; i7++) {
+    const [v1, c1] = stops[i7];
+    if (v <= v1) {
+      const [v0, c0] = stops[i7 - 1];
+      const t4 = v1 === v0 ? 0 : (v - v0) / (v1 - v0);
+      return c0.map((c4, k) => Math.round(c4 + (c1[k] - c4) * t4));
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+function resolveWindShade(value, risk = "wind") {
+  const [r4, g4, b4] = interpolateShade(risk === "tornado" ? TORNADO_SHADE_STOPS : WIND_SHADE_STOPS, value);
+  return {
+    top: `rgb(${Math.min(255, r4 + 34)}, ${Math.min(255, g4 + 30)}, ${Math.min(255, b4 + 30)})`,
+    base: `rgb(${r4}, ${g4}, ${b4})`,
+    bottom: `rgb(${Math.round(r4 * 0.62)}, ${Math.round(g4 * 0.62)}, ${Math.round(b4 * 0.66)})`
+  };
+}
+// The precipitation chart is shared by rain, snow and wintry mix. Each window
+// picks its falling texture from the forecast condition, falling back to
+// temperature (<=30F snow, <=35F mix) when the condition is not precip-specific.
+function resolvePrecipKind(condition, temperatureF) {
+  const normalized = normalizeConditionKey(condition ?? "");
+  if (normalized === "snowy") return "snow";
+  if (normalized === "snowy_rainy" || normalized === "hail") return "mix";
+  if (normalized === "rainy" || normalized === "pouring" || normalized === "lightning_rainy") return "rain";
+  if (Number.isFinite(temperatureF)) {
+    if (temperatureF <= 30) return "snow";
+    if (temperatureF <= 35) return "mix";
+  }
+  return "rain";
+}
+function resolvePrecipKindsForSeries(series, temperatureSeries) {
+  const temps = temperatureSeries?.points ?? [];
+  const byStart = new Map(temps.map((pt) => [pt.startISO, pt]));
+  return series.points.map((pt, index) => {
+    const temp = byStart.get(pt.startISO) ?? temps.find((t4) => t4.startMs <= pt.startMs && pt.startMs < t4.endMs) ?? temps[index] ?? null;
+    return resolvePrecipKind(temp?.condition ?? null, temp?.temperatureF ?? NaN);
+  });
+}
+// Each loop must translate the pattern by whole tile periods (x a multiple of
+// the tile width, y of its height) or the restart visibly jumps. Rain/mix fall
+// (-14, 30) per loop on a 14x30 tile, so drops are drawn at that same slant.
+// Snow falls straight down one tile and sways via a separate additive, eased
+// x animation so the sideways motion has no corners.
+function renderPrecipFallPatterns(instanceId, motionOk) {
+  const fall = (to, dur) => motionOk ? w`
+        <animateTransform
+          attributeName="patternTransform"
+          type="translate"
+          from="0 0"
+          to=${to}
+          dur=${dur}
+          repeatCount="indefinite"
+        ></animateTransform>
+      ` : A;
+  const sway = (dur) => motionOk ? w`
+        <animateTransform
+          attributeName="patternTransform"
+          type="translate"
+          values="0 0; 2.4 0; 0 0; -2.4 0; 0 0"
+          keyTimes="0; 0.25; 0.5; 0.75; 1"
+          calcMode="spline"
+          keySplines="0.37 0 0.63 1; 0.37 0 0.63 1; 0.37 0 0.63 1; 0.37 0 0.63 1"
+          dur=${dur}
+          additive="sum"
+          repeatCount="indefinite"
+        ></animateTransform>
+      ` : A;
+  return w`
+    <pattern id=${`precipFall-rain-${instanceId}`} width="14" height="30" patternUnits="userSpaceOnUse">
+      ${renderRainDrops()}
+      ${fall("-14 30", "2.4s")}
+    </pattern>
+    <pattern id=${`precipFall-snow-${instanceId}`} width="16" height="32" patternUnits="userSpaceOnUse">
+      <circle class="chart-snow-flake" cx="4" cy="4" r="1.25"></circle>
+      <circle class="chart-snow-flake chart-snow-flake-faint" cx="12" cy="11" r="0.95"></circle>
+      <circle class="chart-snow-flake" cx="7" cy="19" r="1.1"></circle>
+      <circle class="chart-snow-flake chart-snow-flake-faint" cx="13.5" cy="26" r="1.3"></circle>
+      ${fall("0 32", "7s")}
+      ${sway("3.5s")}
+    </pattern>
+    <pattern id=${`precipFall-mix-${instanceId}`} width="14" height="30" patternUnits="userSpaceOnUse">
+      <line class="chart-rain-drop" x1="11" y1="2" x2="9.1" y2="6"></line>
+      <circle class="chart-snow-flake" cx="4" cy="12" r="1.1"></circle>
+      <line class="chart-rain-drop" x1="9" y1="18" x2="7.1" y2="22"></line>
+      <circle class="chart-snow-flake chart-snow-flake-faint" cx="2.5" cy="26" r="1"></circle>
+      ${fall("-14 30", "4s")}
+    </pattern>
+  `;
+}
+function renderRainDrops() {
+  return w`
+    <line class="chart-rain-drop" x1="11" y1="2" x2="9.1" y2="6"></line>
+    <line class="chart-rain-drop" x1="4.5" y1="11" x2="2.6" y2="15"></line>
+    <line class="chart-rain-drop chart-rain-drop-faint" x1="12" y1="18.5" x2="10.4" y2="22"></line>
+    <line class="chart-rain-drop" x1="6.5" y1="24.5" x2="4.6" y2="28.5"></line>
+  `;
+}
+function resolveHailStoneCount(estimate, flagged) {
+  const tier = estimate >= 15 ? 3 : estimate >= 5 ? 2 : estimate > 0 ? 1 : 0;
+  return Math.max(tier, flagged ? 1 : 0);
+}
 var FIRST_OVERLAP_STRATEGIC_WEIGHT = 0.7;
 var FIRST_OVERLAP_NOWCAST_WEIGHT = 0.3;
 function resolveNowcastCoverageWindow(nextHour) {
@@ -3476,7 +3720,7 @@ function buildChartPanelViewModels(domain, config) {
   const issues = [];
   const threshold = config.lowRiskThreshold;
   const significantRisk = domain.riskSeries.filter(
-    (s4) => s4.peakProbability > threshold
+    (s4) => s4.peakProbability > threshold && s4.riskKey !== "hail"
   );
   const hasSignificantRisk = significantRisk.length > 0;
   const isOneHourNowcastRange = config.selectedRange === 1;
@@ -3600,6 +3844,11 @@ function buildChartPanelViewModels(domain, config) {
       const useRainAsPrimary = Boolean(rainSeries) && (hasRainSignal || !stormSeries || !hasStormSignal || config.lowRiskBehavior === "show");
       const primarySeries = useRainAsPrimary ? rainSeries ?? stormSeries : stormSeries ?? rainSeries;
       const stormOverlaySeries = useRainAsPrimary && rainSeries && stormSeries ? buildAlignedRiskSeriesBridge(rainSeries, stormSeries) : null;
+      // Hourly hail: `value` is an estimate (SPC daily hail outlook shaped by
+      // hourly storm chance) and `flagged` marks NWS large-hail / forecast-text
+      // signals. It rides on the precipitation chart as markers, not a panel.
+      const hailSeries = domain.riskSeries.find((s4) => s4.riskKey === "hail") ?? null;
+      const hailOverlaySeries = hailSeries && hailSeries.points.some((pt) => pt.probability > 0 || pt.flagged) ? buildAlignedHailSeriesBridge(primarySeries, hailSeries) : null;
       const axisSampleValues = [
         ...primarySeries.points.map((pt) => pt.probability),
         ...stormOverlaySeries ? stormOverlaySeries.points.map((pt) => Number(pt.value ?? 0)) : []
@@ -3615,6 +3864,8 @@ function buildChartPanelViewModels(domain, config) {
         isTemperature: false,
         _seriesBridge: buildRiskSeriesBridge(primarySeries),
         _stormSeriesBridge: stormOverlaySeries,
+        _hailSeriesBridge: hailOverlaySeries,
+        _precipKinds: resolvePrecipKindsForSeries(primarySeries, domain.temperatureSeries),
         _axisSampleValues: axisSampleValues,
         _precipitationPrimaryRisk: useRainAsPrimary ? "rain" : "storm",
         _precipitationRainPeak: rainSeries ? rainPeak : null,
@@ -3628,8 +3879,36 @@ function buildChartPanelViewModels(domain, config) {
       });
     }
   }
+  // Strong wind and tornado are scales of the same phenomenon, so they share
+  // one panel: wind is the primary series, tornado an overlay on the same axis.
+  {
+    const windSeries = domain.riskSeries.find((s4) => s4.riskKey === "strong_wind") ?? null;
+    const tornadoSeries = isOneHourNowcastRange ? null : domain.riskSeries.find((s4) => s4.riskKey === "tornado") ?? null;
+    const windPeak = windSeries?.peakProbability ?? 0;
+    const tornadoPeak = tornadoSeries?.peakProbability ?? 0;
+    const primarySeries = windSeries ?? tornadoSeries;
+    const isSignificant = windPeak > threshold || tornadoPeak > threshold;
+    if (primarySeries && (isSignificant || config.lowRiskBehavior === "show")) {
+      const tornadoOverlay = windSeries && tornadoSeries && tornadoPeak > 0 ? buildAlignedRiskSeriesBridge(windSeries, tornadoSeries) : null;
+      const peakParts = [
+        windSeries ? `Wind ${windPeak.toFixed(0)}%` : null,
+        tornadoSeries && (tornadoPeak > 0 || !windSeries) ? `Tornado ${tornadoPeak.toFixed(0)}%` : null
+      ].filter(Boolean);
+      panels.push({
+        nodeId: "panel-wind",
+        panelKey: "wind",
+        label: tornadoOverlay ? "Wind & tornado" : windSeries ? "Strong winds" : "Tornado",
+        peakDisplay: peakParts.join(" \xB7 "),
+        isTemperature: false,
+        _seriesBridge: buildRiskSeriesBridge(primarySeries),
+        _windPrimaryRisk: windSeries ? "wind" : "tornado",
+        _tornadoSeriesBridge: tornadoOverlay,
+        _observer: null
+      });
+    }
+  }
   for (const rs of domain.riskSeries) {
-    if (rs.riskKey === "rain" || rs.riskKey === "storm" || rs.riskKey === "hail")
+    if (rs.riskKey === "rain" || rs.riskKey === "storm" || rs.riskKey === "hail" || rs.riskKey === "strong_wind" || rs.riskKey === "tornado")
       continue;
     if (isOneHourNowcastRange && rs.riskKey === "tornado") {
       continue;
@@ -3817,7 +4096,7 @@ function resolveTemperatureLabelCadence(densityMode, minBarWidth) {
     case "compact":
       return 2;
     case "dense":
-      return minBarWidth >= 28 ? 2 : 3;
+      return 2;
     case "stress":
       return minBarWidth >= 24 ? 3 : 4;
     default:
@@ -3827,7 +4106,9 @@ function resolveTemperatureLabelCadence(densityMode, minBarWidth) {
 function resolveTemperatureLabelVisibility(points, bars, markers, currentPointIndex, selectedTooltipIndex) {
   const densityMode = resolveTemperatureDensityMode(bars, points.length);
   const minBarWidth = Math.min(...bars.map((bar) => bar.width));
-  const showAllBarValueLabels = minBarWidth >= 24;
+  // Temperature labels use the 12px feels-like size, so a 3-glyph "86°" fits
+  // over bars down to ~18px wide.
+  const showAllBarValueLabels = minBarWidth >= 18;
   const cadence = resolveTemperatureLabelCadence(densityMode, minBarWidth);
   const anchors = /* @__PURE__ */ new Set();
   if (bars.length > 0) {
@@ -3876,7 +4157,7 @@ function resolveTemperatureLabelVisibility(points, bars, markers, currentPointIn
     }
     const isAnchor = anchors.has(index);
     const canPiggyback = visibleBarValueIndices.has(index);
-    const shouldShow = densityMode === "comfortable" ? true : densityMode === "compact" ? canPiggyback && (isAnchor || index % 4 === 0) : isAnchor && (currentPointIndex === index || selectedTooltipIndex === index);
+    const shouldShow = densityMode === "comfortable" ? true : canPiggyback && (isAnchor || index % cadence === 0);
     if (shouldShow) {
       visibleFeelsLikeValueIndices.add(index);
     }
@@ -4091,6 +4372,7 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
     minPlotRight: sharedHorizontalLayout?.minPlotRight
   };
   const svgModel = buildSvgChartModel(panel._seriesBridge, layoutOptions);
+  const chartStyle = config.chartStyle === "line" ? "line" : "bars";
   const celestial = config.showCelestialTrack !== false && panel.isTemperature && panel._observer ? buildCelestialTrackLayout(
     panel._seriesBridge,
     svgModel.bars,
@@ -4128,7 +4410,11 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
   }));
   const bars = svgModel.bars.map((bar) => {
     const marker = markerByIndex.get(bar.index);
-    const valueY = resolveBarValueLabelY(bar, marker, svgModel.plotTop);
+    const valueY = resolveBarValueLabelY(
+      chartStyle === "line" ? { ...bar, y: bar.lineY, valueY: bar.lineValueY } : bar,
+      marker,
+      svgModel.plotTop
+    );
     const isTemp = panel.isTemperature;
     const isPrecipitationPanel = panel.panelKey === "precipitation";
     const hasMeaningfulProbability = bar.value >= 0.5;
@@ -4143,26 +4429,88 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
       y: bar.y,
       width: bar.width,
       height: bar.height,
+      lineY: bar.lineY,
+      centerX: bar.centerX,
       valueX: bar.valueX,
       valueY,
       showValueLabel: labelVisibility ? labelVisibility.visibleBarValueIndices.has(bar.index) : panel._precipitationMode === "nowcast" ? false : isPrecipitationPanel ? hasMeaningfulProbability : true,
       xLabelX: bar.xLabelX,
       xLabelY: bar.xLabelY,
-      path: buildTopRoundedBarPath(bar)
+      path: buildTopRoundedBarPath(bar),
+      shade: panel.panelKey === "wind" ? resolveWindShade(bar.value, panel._windPrimaryRisk) : null,
+      precipKind: panel._precipKinds?.[bar.index] ?? "rain"
     };
   });
-  const precipitation = buildPrecipitationOverlayLayout(
+  // Line mode: one column per window (midpoint to midpoint) so the area under
+  // the line can carry each window's rain/snow/mix texture.
+  const precipFallColumns = panel.panelKey === "precipitation" && panel._precipKinds ? bars.map((bar, index) => {
+    const left = index === 0 ? svgModel.plotLeft : (bars[index - 1].centerX + bar.centerX) / 2;
+    const right = index === bars.length - 1 ? svgModel.width - svgModel.plotRight : (bar.centerX + bars[index + 1].centerX) / 2;
+    return { index: bar.index, x: left, width: Math.max(0, right - left), kind: bar.precipKind };
+  }) : [];
+  let line = null;
+  if (chartStyle === "line") {
+    const lineSeries = buildLineSeriesLayout(bars, { baselineY: svgModel.baselineY });
+    if (lineSeries) {
+      let gradient = null;
+      const colors = panel.isTemperature ? (() => {
+        const yMax = scaleLayoutY(svgModel.axis.max, svgModel.axis, svgModel.plotTop, svgModel.baselineY);
+        const yMin = scaleLayoutY(svgModel.axis.min, svgModel.axis, svgModel.plotTop, svgModel.baselineY);
+        const span = yMin - yMax;
+        gradient = {
+          y1: yMax,
+          y2: yMin,
+          stops: svgModel.axis.ticks.map((tick) => ({
+            offset: span === 0 ? 0 : clamp2((scaleLayoutY(tick, svgModel.axis, svgModel.plotTop, svgModel.baselineY) - yMax) / span, 0, 1),
+            color: resolveTemperatureGradientFillColors(tick).top
+          }))
+        };
+        return {
+          top: resolveTemperatureGradientFillColors(svgModel.axis.max).top,
+          bottom: resolveTemperatureGradientFillColors(svgModel.axis.min).bottom
+        };
+      })() : panel.panelKey === "wind" ? (() => {
+        const yMax = scaleLayoutY(svgModel.axis.max, svgModel.axis, svgModel.plotTop, svgModel.baselineY);
+        const yMin = scaleLayoutY(svgModel.axis.min, svgModel.axis, svgModel.plotTop, svgModel.baselineY);
+        const span = yMin - yMax;
+        gradient = {
+          y1: yMax,
+          y2: yMin,
+          stops: svgModel.axis.ticks.map((tick) => ({
+            offset: span === 0 ? 0 : clamp2((scaleLayoutY(tick, svgModel.axis, svgModel.plotTop, svgModel.baselineY) - yMax) / span, 0, 1),
+            color: resolveWindShade(tick, panel._windPrimaryRisk).top
+          }))
+        };
+        return {
+          top: resolveWindShade(svgModel.axis.max, panel._windPrimaryRisk).base,
+          bottom: resolveWindShade(svgModel.axis.min, panel._windPrimaryRisk).bottom
+        };
+      })() : panel.panelKey === "precipitation" ? { top: "#87d4ff", bottom: "#2f5f9f" } : { top: "#67c6ff", bottom: "#286cff" };
+      line = {
+        ...lineSeries,
+        colors,
+        gradient,
+        gradientId: `lineGrad-${panel.panelKey}-${config.selectedRange ?? "auto"}`,
+        areaGradientId: `lineArea-${panel.panelKey}-${config.selectedRange ?? "auto"}`
+      };
+      if (panel.isTemperature && rawMarkers.length >= Math.ceil(panel._seriesBridge.points.length * 0.5)) {
+        const feelsLikePoints = rawMarkers.map((m3) => ({ x: m3.labelX, y: m3.y })).sort((a, b) => a.x - b.x);
+        line.feelsLikePath = buildMonotoneCubicPath(feelsLikePoints);
+      }
+    }
+  }
+  const precipitation = chartStyle === "bars" ? buildPrecipitationOverlayLayout(
     panel,
     bars,
     svgModel.axis,
     svgModel.plotTop,
     svgModel.baselineY
-  );
+  ) : null;
   let feelsLikeMarkers = rawMarkers.map((m3) => ({
     nodeId: `feels-like-${panel.panelKey}-${m3.index}`,
     index: m3.index,
-    x1: m3.x1,
-    x2: m3.x2,
+    x1: chartStyle === "line" ? m3.labelX - 7 : m3.x1,
+    x2: chartStyle === "line" ? m3.labelX + 7 : m3.x2,
     y: m3.y,
     labelX: m3.labelX,
     labelY: m3.labelY,
@@ -4182,7 +4530,100 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
       return { ...marker, showValueLabel: false };
     });
   }
-  const temperatureGradients = panel.isTemperature ? svgModel.bars.map((bar) => ({
+  if (config.labelDedupe) {
+    let lastShownValue = null;
+    for (const bar of bars) {
+      if (!bar.showValueLabel) continue;
+      if (lastShownValue !== null && bar.valueDisplay === lastShownValue && !bar.isCurrent) {
+        bar.showValueLabel = false;
+      } else {
+        lastShownValue = bar.valueDisplay;
+      }
+    }
+    let lastShownMarker = null;
+    for (const marker of feelsLikeMarkers) {
+      if (!marker.showValueLabel) continue;
+      if (lastShownMarker !== null && marker.valueDisplay === lastShownMarker && !marker.isCurrent) {
+        marker.showValueLabel = false;
+      } else {
+        lastShownMarker = marker.valueDisplay;
+      }
+    }
+  }
+  // Line charts have no bars to carry storm caps, so storm probability is
+  // drawn as a trace there; bar charts keep the per-bar storm caps and sparks.
+  let stormTrace = null;
+  if (chartStyle === "line" && panel.panelKey === "precipitation" && panel._stormSeriesBridge && bars.length === panel._stormSeriesBridge.points.length) {
+    const stormValues = panel._stormSeriesBridge.points.map((pt) => Number(pt.value ?? 0));
+    if (stormValues.some((value) => value > 0)) {
+      const points = bars.map((bar, index) => ({
+        x: bar.centerX,
+        y: scaleLayoutY(stormValues[index], svgModel.axis, svgModel.plotTop, svgModel.baselineY)
+      }));
+      const path = buildMonotoneCubicPath(points);
+      if (path) {
+        // Peak nodes echo the bar caps: only local maxima that reach the
+        // "high" energy tier get a marker, so the line stays calm elsewhere.
+        const nodes = points.map((point, index) => ({
+          nodeId: `${panel.panelKey}-storm-node-${index}`,
+          index,
+          x: point.x,
+          y: point.y,
+          value: stormValues[index],
+          energyTier: resolveStormEnergyTier(stormValues[index])
+        })).filter((node) => node.energyTier === "high" && node.value >= (stormValues[node.index - 1] ?? -Infinity) && node.value > (stormValues[node.index + 1] ?? -Infinity));
+        stormTrace = { path, nodes };
+      }
+    }
+  }
+  // Tornado overlay for the combined wind panel: a narrow magenta core bar
+  // inside each wind bar (bars) or a magenta trace (line), on the same axis.
+  let tornadoBars = [];
+  let tornadoTrace = null;
+  if (panel.panelKey === "wind" && panel._tornadoSeriesBridge && bars.length === panel._tornadoSeriesBridge.points.length) {
+    const tornadoValues = panel._tornadoSeriesBridge.points.map((pt) => Number(pt.value ?? 0));
+    if (chartStyle === "line") {
+      const path = buildMonotoneCubicPath(bars.map((bar, index) => ({
+        x: bar.centerX,
+        y: scaleLayoutY(tornadoValues[index], svgModel.axis, svgModel.plotTop, svgModel.baselineY)
+      })));
+      if (path) tornadoTrace = { path };
+    } else {
+      tornadoBars = bars.filter((bar) => tornadoValues[bar.index] > 0).map((bar) => {
+        const value = tornadoValues[bar.index];
+        const width = Math.max(3, bar.width * 0.42);
+        const y = Math.min(scaleLayoutY(value, svgModel.axis, svgModel.plotTop, svgModel.baselineY), svgModel.baselineY - 2);
+        return {
+          nodeId: `${panel.panelKey}-tornado-${bar.index}`,
+          index: bar.index,
+          value,
+          x: bar.centerX - width / 2,
+          y,
+          width,
+          height: svgModel.baselineY - y,
+          shade: resolveWindShade(value, "tornado")
+        };
+      });
+    }
+  }
+  let hailMarks = [];
+  if (panel.panelKey === "precipitation" && panel._hailSeriesBridge && bars.length === panel._hailSeriesBridge.points.length) {
+    const stoneR = clampLayout(bars[0] ? bars[0].width * 0.09 : 1.6, 1.3, 2.1);
+    hailMarks = bars.map((bar) => {
+      const point = panel._hailSeriesBridge.points[bar.index];
+      const stones = resolveHailStoneCount(Number(point?.value ?? 0), point?.flagged === true);
+      return {
+        nodeId: `${panel.panelKey}-hail-${bar.index}`,
+        index: bar.index,
+        x: bar.centerX,
+        y: svgModel.baselineY - stoneR * 2 - 3,
+        r: stoneR,
+        stones,
+        flagged: point?.flagged === true
+      };
+    }).filter((mark) => mark.stones > 0);
+  }
+  const temperatureGradients = panel.isTemperature && chartStyle === "bars" ? svgModel.bars.map((bar) => ({
     nodeId: `gradient-${panel.panelKey}-${bar.index}`,
     gradientId: `tempGrad-${panel.panelKey}-${bar.index}`,
     barValue: bar.value,
@@ -4203,7 +4644,7 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
           svgModel,
           tooltipViewportRange
         );
-      } else if (panel.panelKey === "precipitation") {
+      } else if (panel.panelKey === "precipitation" || panel.panelKey === "wind") {
         tooltip = buildPrecipitationTooltipLayout(
           panel,
           selectedTooltipIndex,
@@ -4229,6 +4670,15 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
         code: "tooltip_index_out_of_range",
         message: `Selected tooltip index ${selectedTooltipIndex} out of range for panel "${panel.panelKey}"`
       });
+    }
+  }
+  let dayColumns = null;
+  if (config.xAxisLabels === "compact" && panel._seriesBridge.points.length > 0) {
+    const points = panel._seriesBridge.points;
+    const firstStart = new Date(points[0].start).getTime();
+    const lastEnd = new Date(points[points.length - 1].end).getTime();
+    if (Number.isFinite(firstStart) && Number.isFinite(lastEnd) && lastEnd - firstStart >= 20 * 3600 * 1000) {
+      dayColumns = buildDayColumnLayout(points, bars, svgModel);
     }
   }
   return {
@@ -4257,6 +4707,14 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
       tooltip,
       selectedBarHighlight,
       showYAxisLabels: config.showYAxisLabels,
+      chartStyle,
+      line,
+      dayColumns,
+      stormTrace,
+      hailMarks,
+      tornadoBars,
+      tornadoTrace,
+      precipFallColumns,
       celestial,
       precipitation
     },
@@ -4293,6 +4751,16 @@ function formatProbabilityValue(value) {
   return `${Math.max(0, value).toFixed(0)}%`;
 }
 function resolvePrecipitationTooltipLabels(panel, selectedIndex) {
+  if (panel.panelKey === "wind") {
+    const primary = Number(panel._seriesBridge.points[selectedIndex]?.value ?? NaN);
+    if (!Number.isFinite(primary)) return null;
+    const primaryName = panel._windPrimaryRisk === "tornado" ? "Tornado" : "Strong wind";
+    const tornado = Number(panel._tornadoSeriesBridge?.points[selectedIndex]?.value ?? NaN);
+    return {
+      primaryLabel: `${primaryName} ${formatProbabilityValue(primary)}`,
+      secondaryLabel: Number.isFinite(tornado) ? `Tornado ${formatProbabilityValue(tornado)}` : null
+    };
+  }
   if (panel.panelKey !== "precipitation") return null;
   const primaryValue = Number(
     panel._seriesBridge.points[selectedIndex]?.value ?? NaN
@@ -4343,25 +4811,33 @@ function resolvePrecipitationTooltipLabels(panel, selectedIndex) {
     };
   }
   const rainLabel = `Rain ${formatProbabilityValue(primaryValue)}`;
+  const hailPoint = panel._hailSeriesBridge?.points[selectedIndex];
+  const hailEstimate = Number(hailPoint?.value ?? 0);
+  const hailParts = [
+    hailEstimate > 0 ? `Hail ~${formatProbabilityValue(hailEstimate)} est.` : hailPoint?.flagged ? "Hail" : null,
+    hailPoint?.flagged ? "NWS flag" : null
+  ].filter(Boolean);
+  const hailText = hailParts.length > 0 ? hailParts.join(" · ") : null;
+  const hailFlagged = hailText !== null;
+  const hailSuffix = hailText ? ` · ${hailText}` : "";
   const hasStormSignal = (panel._precipitationStormPeak ?? 0) > 0;
-  if (!hasStormSignal) {
-    return { primaryLabel: rainLabel, secondaryLabel: null };
-  }
   const stormOverlayValue = Number(
     panel._stormSeriesBridge?.points[selectedIndex]?.value ?? NaN
   );
-  if (!Number.isFinite(stormOverlayValue)) {
-    return { primaryLabel: rainLabel, secondaryLabel: null };
+  if (!hasStormSignal || !Number.isFinite(stormOverlayValue)) {
+    return { primaryLabel: rainLabel, secondaryLabel: hailFlagged ? hailText : null };
   }
   return {
     primaryLabel: rainLabel,
-    secondaryLabel: `Storm ${formatProbabilityValue(stormOverlayValue)}`
+    secondaryLabel: `Storm ${formatProbabilityValue(stormOverlayValue)}${hailSuffix}`
   };
 }
 function buildPrecipitationTooltipLayout(panel, selectedIndex, bar, point, svgModel, visibleRange) {
   const labels = resolvePrecipitationTooltipLabels(panel, selectedIndex);
   if (!labels) return null;
-  const BOX_WIDTH = 184;
+  // Widen for longer secondary copy (e.g. "Storm 75% · Hail ~15% est. · NWS flag").
+  const longestLabel = Math.max(labels.primaryLabel.length, labels.secondaryLabel?.length ?? 0);
+  const BOX_WIDTH = Math.max(184, Math.round(longestLabel * 7 + 32));
   const boxY = 10;
   const hasSecondary = Boolean(labels.secondaryLabel);
   const boxHeight = hasSecondary ? 86 : 68;
@@ -4853,6 +5329,7 @@ var DEFAULT_TEMPERATURE_AXIS_MODE = "auto";
 var DEFAULT_X_AXIS_LABEL_MODE = "compact";
 var DEFAULT_SERIES_LAYOUT = "stacked";
 var DEFAULT_SERIES_COLUMNS = 2;
+var DEFAULT_CHART_STYLE = "bars";
 var DEFAULT_LOW_RISK_BEHAVIOR = "icons";
 var DEFAULT_LOW_RISK_THRESHOLD = 2;
 var DEFAULT_WIND_THRESHOLD_MPH = 25;
@@ -4862,7 +5339,11 @@ function resolvePrecipitationBarVisualMode(layout) {
   return layout.precipitation?.primaryRisk === "storm" ? "storm-primary" : "rain-primary";
 }
 function rangeLabel(rangeHours) {
-  return `${rangeHours}h`;
+  return rangeHours === 120 ? "5d" : `${rangeHours}h`;
+}
+function rangeOptionLabel(rangeHours) {
+  if (rangeHours === 1) return "Now / 1h nowcast (when available)";
+  return rangeHours === 120 ? "5 days" : `${rangeHours} hours`;
 }
 function ambientImageUrl(fileName) {
   return new URL(`./assets/ambient-stage/${fileName}`, import.meta.url).href;
@@ -4988,10 +5469,11 @@ function normalizeLowRiskBehavior(value) {
 function normalizeCardConfig(config = {}) {
   const normalizedLocation = typeof config.location === "string" ? normalizeLocationKey(config.location) : "";
   const inferredLocation = !normalizedLocation && typeof config.entity === "string" && config.entity.trim() ? deriveLocationKeyFromEntityId(config.entity.trim()) : "";
+  const normalizedRange = Number(config.default_range);
   const normalized = {
     type: typeof config.type === "string" ? config.type : `custom:${CARD_TYPE}`,
     entity: typeof config.entity === "string" ? config.entity : "",
-    default_range: rangeValues().includes(config.default_range) ? config.default_range : DEFAULT_RANGE,
+    default_range: rangeValues().includes(normalizedRange) ? normalizedRange : DEFAULT_RANGE,
     show_alerts: config.show_alerts !== false,
     max_alerts: normalizeMaxAlerts(config.max_alerts),
     temperature_display: config.temperature_display === "fallback_only" ? "fallback_only" : DEFAULT_TEMPERATURE_DISPLAY,
@@ -5003,6 +5485,8 @@ function normalizeCardConfig(config = {}) {
     series_columns: normalizeSeriesColumns(config.series_columns),
     low_risk_behavior: normalizeLowRiskBehavior(config.low_risk_behavior),
     low_risk_threshold: normalizeLowRiskThreshold(config.low_risk_threshold),
+    label_dedupe: config.label_dedupe === true || config.label_dedupe === "on",
+    chart_style: config.chart_style === "line" ? "line" : DEFAULT_CHART_STYLE,
     // Curve experiment rolled back: default to no celestial track unless explicitly enabled.
     celestial_track: config.celestial_track === true
   };
@@ -5078,7 +5562,11 @@ function renderDetailPill(pill, handlers) {
           ` : A}
     </span>
   `;
-  if (pill.detailText) {
+  // Every pill with something to say uses the card's floating tooltip instead
+  // of the native title: hover previews it (mouse), click or tap pins it, and
+  // tapping elsewhere dismisses it.
+  const tooltipText = pill.detailText ?? pill.title ?? null;
+  if (tooltipText) {
     return b2`
       <button
         type="button"
@@ -5087,11 +5575,17 @@ function renderDetailPill(pill, handlers) {
         data-accent=${pill.accent ?? "default"}
         data-node-id=${pill.nodeId}
         data-node-kind="detail-pill"
-        title=${pill.title}
-        aria-label=${pill.ariaLabel}
-        @pointerenter=${(event) => handlers.show(event, pill.detailText)}
-        @focus=${(event) => handlers.show(event, pill.detailText)}
-        @pointerleave=${handlers.hide}
+        aria-label=${pill.ariaLabel ?? tooltipText}
+        @pointerenter=${(event) => {
+      if (event.pointerType === "mouse") handlers.show(event, tooltipText);
+    }}
+        @pointerleave=${(event) => {
+      if (event.pointerType === "mouse") handlers.hide();
+    }}
+        @click=${(event) => handlers.toggle(event, tooltipText)}
+        @focus=${(event) => {
+      if (event.currentTarget.matches(":focus-visible")) handlers.show(event, tooltipText);
+    }}
         @blur=${handlers.hide}
       >
         ${content}
@@ -5116,6 +5610,18 @@ function renderDetailPillRail(pills, handlers) {
   for (let index = 0; index < pills.length; index += 1) {
     const pill = pills[index];
     const next = pills[index + 1];
+    const next2 = pills[index + 2];
+    if (pill.kind === "wind" && next?.kind === "humidity" && next2?.kind === "dew_point") {
+      rows.push(b2`
+        <div class="hero-pill-pair hero-pill-triple" data-node-id="pill-conditions-row" data-node-kind="detail-pill-pair">
+          ${renderDetailPill(pill, handlers)}
+          ${renderDetailPill(next, handlers)}
+          ${renderDetailPill(next2, handlers)}
+        </div>
+      `);
+      index += 2;
+      continue;
+    }
     if (pill.kind === "humidity" && next?.kind === "dew_point") {
       rows.push(b2`
         <div class="hero-pill-pair" data-node-id="pill-moisture-pair" data-node-kind="detail-pill-pair">
@@ -5186,9 +5692,19 @@ var WeatherRiskBridgeCard = class extends i4 {
     this._onCompactChartChange = (e6) => {
       this._compactChart = e6.matches;
     };
-    this._hideDetailTooltip = () => {
+    // Transient (hover/focus) tooltips close on leave; pinned ones (click or
+    // tap) stay until toggled, dismissed by an outside tap, or forced closed.
+    this._hideDetailTooltip = (force = true) => {
       if (!this._detailTooltip) return;
+      if (!force && this._detailTooltip.pinned) return;
       this._detailTooltip = null;
+    };
+    this._onDocumentPointerDown = (event) => {
+      if (!this._detailTooltip) return;
+      const onPill = event.composedPath().some(
+        (node) => node instanceof Element && node.classList.contains("detail-pill-button")
+      );
+      if (!onPill) this._hideDetailTooltip(true);
     };
     this._handlePlotScroll = () => {
       this._clearTemperatureTooltip();
@@ -5208,10 +5724,12 @@ var WeatherRiskBridgeCard = class extends i4 {
     this._compactChartMedia = window.matchMedia(CHART_COMPACT_MEDIA);
     this._compactChart = this._compactChartMedia.matches;
     this._compactChartMedia.addEventListener("change", this._onCompactChartChange);
+    document.addEventListener("pointerdown", this._onDocumentPointerDown, true);
   }
   disconnectedCallback() {
     this._compactChartMedia?.removeEventListener("change", this._onCompactChartChange);
     this._compactChartMedia = null;
+    document.removeEventListener("pointerdown", this._onDocumentPointerDown, true);
     if (this._renderedValidationTimer !== null) {
       clearTimeout(this._renderedValidationTimer);
       this._renderedValidationTimer = null;
@@ -5252,7 +5770,15 @@ var WeatherRiskBridgeCard = class extends i4 {
       hass: this.hass
     });
   }
-  _showDetailTooltip(event, detailText) {
+  _toggleDetailTooltip(event, detailText) {
+    const anchorId = event.currentTarget instanceof HTMLElement ? event.currentTarget.dataset.nodeId : null;
+    if (this._detailTooltip?.pinned && this._detailTooltip.anchorId === anchorId) {
+      this._hideDetailTooltip(true);
+      return;
+    }
+    this._showDetailTooltip(event, detailText, true);
+  }
+  _showDetailTooltip(event, detailText, pinned = false) {
     const trigger = event.currentTarget;
     const wrap = this.renderRoot.querySelector(".wrap");
     if (!(trigger instanceof HTMLElement) || !(wrap instanceof HTMLElement)) return;
@@ -5273,7 +5799,9 @@ var WeatherRiskBridgeCard = class extends i4 {
       top,
       width,
       pointerLeft,
-      placement
+      placement,
+      pinned,
+      anchorId: trigger.dataset.nodeId ?? null
     };
   }
   _updateTemperatureTooltipViewport(anchor) {
@@ -5321,12 +5849,27 @@ var WeatherRiskBridgeCard = class extends i4 {
               name: "default_range",
               selector: {
                 select: {
+                  options: rangeValues().map((value) => ({
+                    label: rangeOptionLabel(value),
+                    value: String(value)
+                  }))
+                }
+              }
+            }
+          ]
+        },
+        {
+          type: "grid",
+          name: "",
+          flatten: true,
+          schema: [
+            {
+              name: "chart_style",
+              selector: {
+                select: {
                   options: [
-                    { label: "Now / 1h nowcast (when available)", value: "1" },
-                    { label: "4 hours", value: "4" },
-                    { label: "12 hours", value: "12" },
-                    { label: "24 hours", value: "24" },
-                    { label: "48 hours", value: "48" }
+                    { label: "Bars (columns)", value: "bars" },
+                    { label: "Line", value: "line" }
                   ]
                 }
               }
@@ -5372,6 +5915,17 @@ var WeatherRiskBridgeCard = class extends i4 {
                     { label: "Compact", value: "compact" },
                     { label: "Full", value: "full" },
                     { label: "Off", value: "off" }
+                  ]
+                }
+              }
+            },
+            {
+              name: "label_dedupe",
+              selector: {
+                select: {
+                  options: [
+                    { label: "Show all values", value: "off" },
+                    { label: "Hide repeated values", value: "on" }
                   ]
                 }
               }
@@ -5454,12 +6008,16 @@ var WeatherRiskBridgeCard = class extends i4 {
             return "Card title";
           case "default_range":
             return "Default range";
+          case "chart_style":
+            return "Chart style";
           case "probability_axis_mode":
             return "Probability axis";
           case "temperature_axis_mode":
             return "Temperature axis";
           case "x_axis_labels":
             return "X axis labels";
+          case "label_dedupe":
+            return "Value labels";
           case "low_risk_behavior":
             return "Quiet forecast handling";
           case "low_risk_threshold":
@@ -5484,12 +6042,16 @@ var WeatherRiskBridgeCard = class extends i4 {
             return "Overrides the card heading.";
           case "default_range":
             return "Sets the first horizon shown when the dashboard loads. Now / 1h appears only when minute nowcast is ready.";
+          case "chart_style":
+            return "Renders each series as a smooth line with a soft fill instead of bar columns.";
           case "probability_axis_mode":
             return "Adaptive is the recommended default for low-risk periods.";
           case "temperature_axis_mode":
             return "Fixed 20F span keeps 4h, 12h, 24h, and 48h on the same kind of temperature scale.";
           case "x_axis_labels":
             return "Compact shows a few time labels, full shows every label, and off gives the cleanest plot.";
+          case "label_dedupe":
+            return "Hide repeated values keeps the first label in a run and only writes the next when the value changes.";
           case "low_risk_behavior":
             return "Controls what happens when hazard risk stays at or below the quiet threshold.";
           case "low_risk_threshold":
@@ -5534,8 +6096,10 @@ var WeatherRiskBridgeCard = class extends i4 {
       showYAxisLabels: c4.show_y_axis_labels !== false,
       seriesLayout: c4.series_layout ?? DEFAULT_SERIES_LAYOUT,
       seriesColumns: c4.series_columns ?? DEFAULT_SERIES_COLUMNS,
+      chartStyle: c4.chart_style === "line" ? "line" : DEFAULT_CHART_STYLE,
       lowRiskBehavior: c4.low_risk_behavior ?? DEFAULT_LOW_RISK_BEHAVIOR,
       lowRiskThreshold: c4.low_risk_threshold ?? DEFAULT_LOW_RISK_THRESHOLD,
+      labelDedupe: c4.label_dedupe === true,
       showAlerts: c4.show_alerts !== false,
       maxAlerts: c4.max_alerts ?? DEFAULT_MAX_ALERTS,
       showCelestialTrack: c4.celestial_track === true
@@ -5553,8 +6117,8 @@ var WeatherRiskBridgeCard = class extends i4 {
     const availableRanges = canonical.filter(
       (rangeHours) => Boolean(this.hass.states[entityIdForRange(baseEntityId, rangeHours)])
     );
-    const strategicAvailable = strategic.filter((rangeHours) => availableRanges.includes(rangeHours));
-    let rangeOptions = strategicAvailable.length > 0 ? [...strategicAvailable] : availableRanges.filter((rangeHours) => rangeHours !== 1);
+    // Longer horizons such as 5d are additive: show every available range except the capability-gated nowcast.
+    let rangeOptions = availableRanges.filter((rangeHours) => rangeHours !== 1);
     const oneHourEntityId = entityIdForRange(baseEntityId, 1);
     const oneHourState = this.hass.states[oneHourEntityId];
     const oneHourMode = oneHourState ? assessOneHourNowcastModeFromAttributes(oneHourState.attributes ?? {}) : "missing_data";
@@ -5617,7 +6181,8 @@ var WeatherRiskBridgeCard = class extends i4 {
     const ambientSceneImageUrl = getAmbientSceneImageUrl(ambientScene);
     const detailTooltipHandlers = {
       show: (event, detailText) => this._showDetailTooltip(event, detailText),
-      hide: () => this._hideDetailTooltip()
+      hide: () => this._hideDetailTooltip(false),
+      toggle: (event, detailText) => this._toggleDetailTooltip(event, detailText)
     };
     if (vm.panels.length === 0) {
       return b2`
@@ -5672,6 +6237,8 @@ var WeatherRiskBridgeCard = class extends i4 {
                       <button
                         type="button"
                         ?selected=${vm.selectedRange === rangeHours}
+                        aria-label=${rangeOptionLabel(rangeHours)}
+                        aria-pressed=${vm.selectedRange === rangeHours ? "true" : "false"}
                         @click=${() => this._selectRange(rangeHours)}
                       >
                         ${rangeLabel(rangeHours)}
@@ -5792,10 +6359,112 @@ var WeatherRiskBridgeCard = class extends i4 {
    * optional TemperatureHeaderViewModel. This method is a pure template
    * mapping — no layout math, no semantic derivation, no HA data access.
    */
+  _renderLineSeriesGroup(layout) {
+    const line = layout.line;
+    const currentPoint = line.points.find((point) => point.isCurrent) ?? null;
+    return w`
+          <g
+            class="chart-line-group"
+            data-kind=${layout.panelKey}
+            data-node-id=${`${layout.panelKey}-line-group`}
+            data-node-kind="line-series"
+          >
+            ${line.areaPath ? w`
+                  <path
+                    class="chart-line-area"
+                    d=${line.areaPath}
+                    fill=${`url(#${line.areaGradientId}-${this._instanceId})`}
+                    data-node-id=${`${layout.panelKey}-line-area`}
+                    data-node-kind="line-area"
+                  ></path>
+                ` : A}
+            ${line.feelsLikePath ? w`
+                  <path
+                    class="chart-line-feels-like"
+                    d=${line.feelsLikePath}
+                    fill="none"
+                    stroke=${`url(#${line.gradientId}-${this._instanceId})`}
+                    data-node-id=${`${layout.panelKey}-line-feels-like`}
+                    data-node-kind="line-feels-like"
+                  ></path>
+                ` : A}
+            <path
+              class="chart-line"
+              d=${line.path}
+              fill="none"
+              stroke=${`url(#${line.gradientId}-${this._instanceId})`}
+              data-node-id=${`${layout.panelKey}-line-path`}
+              data-node-kind="line-path"
+            ></path>
+            ${layout.panelKey === "precipitation" && line.areaPath && layout.precipFallColumns.length ? w`
+                  <clipPath id=${`precipAreaClip-${this._instanceId}`}>
+                    <path d=${line.areaPath}></path>
+                  </clipPath>
+                  <g class="chart-rain-fall" clip-path=${`url(#precipAreaClip-${this._instanceId})`}>
+                    ${layout.precipFallColumns.map(
+      (column) => w`
+                        <rect
+                          data-precip-kind=${column.kind}
+                          x=${column.x}
+                          y="0"
+                          width=${column.width}
+                          height=${layout.svgHeight ?? 2e3}
+                          fill=${`url(#precipFall-${column.kind}-${this._instanceId})`}
+                        ></rect>
+                      `
+    )}
+                  </g>
+                ` : A}
+            ${layout.panelKey === "wind" ? w`
+                  ${line.areaPath ? w`<path class="chart-wind-streaks" d=${line.areaPath} fill=${`url(#windStreak-${this._instanceId}-${layout.panelKey})`}></path>` : A}
+                  <path class="chart-wind-gust" d=${line.path} fill="none"></path>
+                  <path class="chart-wind-gust chart-wind-gust-trail" d=${line.path} fill="none"></path>
+                ` : A}
+            ${currentPoint ? w`
+                  <circle
+                    class="chart-line-dot"
+                    data-current="true"
+                    cx=${currentPoint.x}
+                    cy=${currentPoint.y}
+                    r="4.5"
+                    data-node-id=${`${layout.panelKey}-line-dot`}
+                    data-node-kind="line-dot"
+                  ></circle>
+                ` : A}
+            ${layout.bars.map(
+    (bar) => w`
+                  <text
+                    class="chart-value ${bar.showValueLabel ? "" : "chart-label-hidden"}"
+                    data-current=${bar.isCurrent ? "true" : "false"}
+                    x=${bar.valueX}
+                    y=${bar.valueY}
+                    dx=${degreeLabelDx(bar.valueDisplay)}
+                    text-anchor="middle"
+                    data-node-id=${bar.nodeId}-value
+                    data-node-kind="bar-value"
+                  >
+                    ${bar.valueDisplay}
+                  </text>
+                  <text
+                    class="chart-axis ${bar.label ? "" : "chart-label-hidden"}"
+                    data-current=${bar.isCurrent ? "true" : "false"}
+                    x=${bar.xLabelX}
+                    y=${bar.xLabelY}
+                    text-anchor="middle"
+                    data-node-id=${bar.nodeId}-xlabel
+                    data-node-kind="bar-xlabel"
+                  >
+                    ${bar.label}
+                  </text>
+                `
+  )}
+          </g>
+        `;
+  }
   _renderChartPanel(layout, header, vm) {
     const { tooltip, selectedBarHighlight } = layout;
     const panelVm = vm.panels.find((panel) => panel.panelKey === layout.panelKey) ?? null;
-    const temperatureDensityHint = layout.showAllBarValueLabels ? "All bar labels shown; tap bars for exact values" : layout.densityMode === "comfortable" ? "Tap a bar for details" : layout.densityMode === "compact" ? "Anchor labels shown; tap bars for details" : "Anchor labels shown; tap bars for exact values";
+    const temperatureDensityHint = layout.chartStyle === "line" ? layout.showAllBarValueLabels ? "All point labels shown; tap a point for exact values" : layout.densityMode === "comfortable" ? "Tap a point for details" : layout.densityMode === "compact" ? "Anchor labels shown; tap points for details" : "Anchor labels shown; tap points for exact values" : layout.showAllBarValueLabels ? "All bar labels shown; tap bars for exact values" : layout.densityMode === "comfortable" ? "Tap a bar for details" : layout.densityMode === "compact" ? "Anchor labels shown; tap bars for details" : "Anchor labels shown; tap bars for exact values";
     const chartRenderKey = `${layout.panelKey}:${vm.selectedRange}`;
     const hazardGradientId = `hazardGrad-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const isPrecipitationPanel = layout.panelKey === "precipitation";
@@ -5805,11 +6474,12 @@ var WeatherRiskBridgeCard = class extends i4 {
     const precipitationBarBaseGradientId = `precipBarBase-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const precipitationCloudGradientId = `precipCloud-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const precipitationPoolGradientId = `precipPool-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
-    const precipitationStreakPatternId = `precipStreak-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const precipitationStormBaseGradientId = `precipStormBase-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const precipitationStormChargeGradientId = `precipStormCharge-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const precipitationStormChargePatternId = `precipStormTexture-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
     const stormCapGradientId = `stormCap-${this._instanceId}-${layout.panelKey}-${vm.selectedRange}`;
+    // SMIL pattern motion ignores the CSS reduced-motion media query, so gate it here.
+    const motionOk = !(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
     const svgChart = w`
       <svg
         class="chart-svg"
@@ -5825,18 +6495,82 @@ var WeatherRiskBridgeCard = class extends i4 {
         <defs>
           ${layout.temperatureGradients.map(
       (grad) => w`
-              <linearGradient id=${grad.gradientId} x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id=${`${grad.gradientId}-${this._instanceId}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color=${grad.colors.top}></stop>
                 <stop offset="50%" stop-color=${grad.colors.transition}></stop>
                 <stop offset="100%" stop-color=${grad.colors.bottom}></stop>
               </linearGradient>
             `
     )}
+          ${layout.panelKey === "wind" ? w`
+                <linearGradient id=${`windSheen-${this._instanceId}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#ffffff" stop-opacity="0.32"></stop>
+                  <stop offset="45%" stop-color="#ffffff" stop-opacity="0.06"></stop>
+                  <stop offset="100%" stop-color="#000000" stop-opacity="0.18"></stop>
+                </linearGradient>
+                <pattern
+                  id=${`windStreak-${this._instanceId}-${layout.panelKey}`}
+                  patternUnits="userSpaceOnUse"
+                  width="64"
+                  height="28"
+                >
+                  <path class="chart-wind-streak" d="M 3 8 H 28 C 33 8, 35.5 3.5, 32 1.8 C 29.4 0.6, 26.8 2.6, 28.2 4.6"></path>
+                  <path class="chart-wind-streak" d="M 30 19 H 50 C 54.5 19, 56.5 23.2, 53.4 25 C 51 26.3, 48.6 24.6, 49.8 22.7"></path>
+                  <path class="chart-wind-streak chart-wind-streak-faint" d="M 8 24 H 22 C 25 24, 26.4 21.6, 24.6 20.4"></path>
+                  ${motionOk ? w`
+                        <animateTransform
+                          attributeName="patternTransform"
+                          type="translate"
+                          from="0 0"
+                          to="64 0"
+                          dur="4.2s"
+                          repeatCount="indefinite"
+                        ></animateTransform>
+                      ` : A}
+                </pattern>
+              ` : A}
           <linearGradient id=${hazardGradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#67c6ff" stop-opacity="0.95"></stop>
             <stop offset="100%" stop-color="#286cff" stop-opacity="0.65"></stop>
           </linearGradient>
-          ${isPrecipitationPanel ? w`
+          ${layout.line ? layout.line.gradient ? w`
+                <linearGradient
+                  id=${`${layout.line.gradientId}-${this._instanceId}`}
+                  gradientUnits="userSpaceOnUse"
+                  x1="0"
+                  y1=${layout.line.gradient.y1}
+                  x2="0"
+                  y2=${layout.line.gradient.y2}
+                >
+                  ${layout.line.gradient.stops.map(
+      (stop) => w`
+                    <stop offset=${stop.offset} stop-color=${stop.color}></stop>
+                  `
+    )}
+                </linearGradient>
+                <linearGradient
+                  id=${`${layout.line.areaGradientId}-${this._instanceId}`}
+                  gradientUnits="userSpaceOnUse"
+                  x1="0"
+                  y1=${layout.line.gradient.y1}
+                  x2="0"
+                  y2=${layout.line.gradient.y2}
+                >
+                  <stop offset="0" stop-color=${layout.line.colors.top} stop-opacity="0.3"></stop>
+                  <stop offset="1" stop-color=${layout.line.colors.bottom} stop-opacity="0.02"></stop>
+                </linearGradient>
+              ` : w`
+                <linearGradient id=${`${layout.line.gradientId}-${this._instanceId}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color=${layout.line.colors.top}></stop>
+                  <stop offset="100%" stop-color=${layout.line.colors.bottom}></stop>
+                </linearGradient>
+                <linearGradient id=${`${layout.line.areaGradientId}-${this._instanceId}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color=${layout.line.colors.top} stop-opacity="0.3"></stop>
+                  <stop offset="100%" stop-color=${layout.line.colors.bottom} stop-opacity="0.02"></stop>
+                </linearGradient>
+              ` : A}
+          ${isPrecipitationPanel ? renderPrecipFallPatterns(this._instanceId, motionOk) : A}
+          ${isPrecipitationPanel && layout.chartStyle !== "line" ? w`
                 <linearGradient id=${precipitationBarBaseGradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stop-color="#87d4ff" stop-opacity="0.9"></stop>
                   <stop offset="54%" stop-color="#4e9ee0" stop-opacity="0.86"></stop>
@@ -5852,23 +6586,6 @@ var WeatherRiskBridgeCard = class extends i4 {
                   <stop offset="62%" stop-color="rgba(17, 41, 77, 0.22)"></stop>
                   <stop offset="100%" stop-color="rgba(11, 24, 45, 0.45)"></stop>
                 </linearGradient>
-                <pattern
-                  id=${precipitationStreakPatternId}
-                  width="12"
-                  height="12"
-                  patternUnits="userSpaceOnUse"
-                  patternTransform="rotate(24)"
-                >
-                  <line
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="12"
-                    stroke="rgba(220, 238, 255, 0.22)"
-                    stroke-width="1.1"
-                    stroke-linecap="round"
-                  ></line>
-                </pattern>
                 <linearGradient id=${precipitationStormBaseGradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stop-color="#6c7b92" stop-opacity="0.94"></stop>
                   <stop offset="52%" stop-color="#3f4f69" stop-opacity="0.95"></stop>
@@ -5961,6 +6678,29 @@ var WeatherRiskBridgeCard = class extends i4 {
                 ` : A}
           `
     )}
+        ${layout.dayColumns ? layout.dayColumns.separators.map((separatorX, separatorIndex) => w`
+              <line
+                class="chart-day-separator"
+                x1=${separatorX}
+                y1=${layout.plotTop - 4}
+                x2=${separatorX}
+                y2=${layout.baselineY}
+                data-node-id=${`day-sep-${layout.panelKey}-${separatorIndex}`}
+                data-node-kind="day-separator"
+              ></line>
+            `) : A}
+        ${layout.dayColumns ? layout.dayColumns.columns.filter((column) => column.label && column.width >= 78).map((column, columnIndex) => w`
+              <text
+                class="chart-day-header"
+                x=${Math.min(Math.max(column.center, layout.plotLeft + 70), layout.svgWidth - layout.plotRight - 45)}
+                y="19"
+                text-anchor="middle"
+                data-node-id=${`day-header-${layout.panelKey}-${columnIndex}`}
+                data-node-kind="day-header"
+              >
+                ${column.label}
+              </text>
+            `) : A}
         ${layout.celestial ? w`
               <g
                 class="chart-celestial-tracks"
@@ -6001,7 +6741,7 @@ var WeatherRiskBridgeCard = class extends i4 {
                 ry=${selectedBarHighlight.rx}
               ></rect>
             ` : A}
-        ${layout.bars.map(
+        ${layout.chartStyle === "line" && layout.line ? this._renderLineSeriesGroup(layout) : layout.bars.map(
       (bar) => {
         const hazardCornerRadius = Math.min(6, bar.width / 2, bar.height / 2);
         const precipIntensity = panelVm?._seriesBridge.points[bar.index]?.precip_intensity ?? "none";
@@ -6011,7 +6751,7 @@ var WeatherRiskBridgeCard = class extends i4 {
                       class="chart-bar"
                       data-kind=${layout.panelKey}
                       data-current=${bar.isCurrent ? "true" : "false"}
-                      fill=${`url(#tempGrad-${layout.panelKey}-${bar.index})`}
+                      fill=${`url(#tempGrad-${layout.panelKey}-${bar.index}-${this._instanceId})`}
                       d=${bar.path}
                       data-node-id=${bar.nodeId}
                       data-node-kind="bar"
@@ -6078,11 +6818,12 @@ var WeatherRiskBridgeCard = class extends i4 {
                                   ></rect>
                                   <rect
                                     class="chart-precip-bar-streaks"
+                                    data-precip-kind=${bar.precipKind}
                                     x=${bar.x}
                                     y=${bar.y}
                                     width=${bar.width}
                                     height=${bar.height}
-                                    fill=${`url(#${precipitationStreakPatternId})`}
+                                    fill=${`url(#precipFall-${bar.precipKind}-${this._instanceId})`}
                                   ></rect>
                                   <rect
                                     class="chart-precip-bar-pool"
@@ -6107,7 +6848,7 @@ var WeatherRiskBridgeCard = class extends i4 {
                       class="chart-bar"
                       data-kind=${layout.panelKey}
                       data-current=${bar.isCurrent ? "true" : "false"}
-                      fill=${`url(#${hazardGradientId})`}
+                      fill=${bar.shade ? bar.shade.base : `url(#${hazardGradientId})`}
                       data-node-id=${bar.nodeId}
                       data-node-kind="bar"
                     >
@@ -6128,8 +6869,12 @@ var WeatherRiskBridgeCard = class extends i4 {
                             ></rect>
                           ` : A}
                     </g>
+                    ${bar.shade && bar.height > 0 ? w`
+                          <path class="chart-wind-sheen" d=${bar.path} fill=${`url(#windSheen-${this._instanceId})`}></path>
+                          <path class="chart-wind-streaks" d=${bar.path} fill=${`url(#windStreak-${this._instanceId}-${layout.panelKey})`}></path>
+                        ` : A}
                   `}
-              ${isRainPrimaryPrecipitation && layout.precipitation ? layout.precipitation.stormCaps.filter((cap) => cap.index === bar.index).map(
+              ${isRainPrimaryPrecipitation && layout.precipitation && !layout.stormTrace ? layout.precipitation.stormCaps.filter((cap) => cap.index === bar.index).map(
           (cap) => w`
                         <rect
                           class="chart-storm-cap"
@@ -6146,7 +6891,7 @@ var WeatherRiskBridgeCard = class extends i4 {
                         ></rect>
                       `
         ) : A}
-              ${isRainPrimaryPrecipitation && layout.precipitation ? layout.precipitation.stormSparks.filter((spark) => spark.index === bar.index).map(
+              ${isRainPrimaryPrecipitation && layout.precipitation && !layout.stormTrace ? layout.precipitation.stormSparks.filter((spark) => spark.index === bar.index).map(
           (spark) => w`
                         <path
                           class="chart-storm-spark"
@@ -6163,6 +6908,7 @@ var WeatherRiskBridgeCard = class extends i4 {
                 data-current=${bar.isCurrent ? "true" : "false"}
                 x=${bar.valueX}
                 y=${bar.valueY}
+                dx=${degreeLabelDx(bar.valueDisplay)}
                 text-anchor="middle"
                 data-node-id=${bar.nodeId}-value
                 data-node-kind="bar-value"
@@ -6183,25 +6929,98 @@ var WeatherRiskBridgeCard = class extends i4 {
             `;
       }
     )}
+        ${layout.stormTrace ? w`
+              <path
+                class="chart-storm-trace"
+                d=${layout.stormTrace.path}
+                fill="none"
+                data-node-id=${`${layout.panelKey}-storm-trace`}
+                data-node-kind="storm-trace"
+              ></path>
+              <path
+                class="chart-storm-trace-current"
+                d=${layout.stormTrace.path}
+                fill="none"
+                aria-hidden="true"
+              ></path>
+              ${layout.stormTrace.nodes.map(
+        (node) => w`
+                  <g
+                    class="chart-storm-node"
+                    transform=${`translate(${node.x} ${node.y})`}
+                    data-node-id=${node.nodeId}
+                    data-node-kind="storm-node"
+                  >
+                    <circle class="chart-storm-node-halo" r="4.2"></circle>
+                    <path class="chart-storm-node-bolt" d="M 0.9 -3.4 L -1.6 0.4 L 0.2 0.4 L -0.9 3.4 L 1.7 -0.6 L -0.1 -0.6 Z"></path>
+                  </g>
+                `
+      )}
+            ` : A}
+        ${layout.tornadoBars.map(
+      (core) => w`
+            <rect
+              class="chart-tornado-core"
+              x=${core.x}
+              y=${core.y}
+              width=${core.width}
+              height=${core.height}
+              rx=${Math.min(2, core.width / 2)}
+              fill=${core.shade.base}
+              data-node-id=${core.nodeId}
+              data-node-kind="tornado-core"
+            ></rect>
+          `
+    )}
+        ${layout.tornadoTrace ? w`
+              <path
+                class="chart-tornado-trace"
+                d=${layout.tornadoTrace.path}
+                fill="none"
+                data-node-id=${`${layout.panelKey}-tornado-trace`}
+                data-node-kind="tornado-trace"
+              ></path>
+            ` : A}
+        ${layout.hailMarks.map(
+      (mark) => w`
+            <g
+              class="chart-hail-mark"
+              transform=${`translate(${mark.x} ${mark.y})`}
+              data-node-id=${mark.nodeId}
+              data-node-kind="hail-mark"
+              data-flagged=${mark.flagged ? "true" : "false"}
+            >
+              ${mark.stones === 1 ? w`<circle cx="0" cy="0" r=${mark.r}></circle>` : A}
+              ${mark.stones >= 2 ? w`
+                    <circle cx=${-mark.r * 1.25} cy=${mark.r * 0.7} r=${mark.r}></circle>
+                    <circle cx=${mark.r * 1.25} cy=${mark.r * 0.7} r=${mark.r}></circle>
+                  ` : A}
+              ${mark.stones === 3 ? w`<circle cx="0" cy=${-mark.r * 1.2} r=${mark.r}></circle>` : A}
+            </g>
+          `
+    )}
         ${layout.feelsLikeMarkers.map(
       (marker) => w`
-            <line
-              class="chart-feels-like"
-              data-current=${marker.isCurrent ? "true" : "false"}
-              data-direction=${marker.direction}
-              x1=${marker.x1}
-              y1=${marker.y}
-              x2=${marker.x2}
-              y2=${marker.y}
-              data-node-id=${marker.nodeId}
-              data-node-kind="feels-like"
-            ></line>
+            ${layout.chartStyle !== "line" ? w`
+                  <line
+                    class="chart-feels-like"
+                    data-current=${marker.isCurrent ? "true" : "false"}
+                    data-direction=${marker.direction}
+                    x1=${marker.x1}
+                    y1=${marker.y}
+                    x2=${marker.x2}
+                    y2=${marker.y}
+                    data-node-id=${marker.nodeId}
+                    data-node-kind="feels-like"
+                  ></line>
+                ` : A}
             <text
               class="chart-feels-like-value ${marker.showValueLabel ? "" : "chart-label-hidden"}"
               data-current=${marker.isCurrent ? "true" : "false"}
               data-direction=${marker.direction}
               x=${marker.labelX}
               y=${marker.labelY}
+              dx=${degreeLabelDx(marker.valueDisplay)}
               text-anchor="middle"
               data-node-id=${marker.nodeId}-value
               data-node-kind="feels-like-value"
@@ -6210,7 +7029,7 @@ var WeatherRiskBridgeCard = class extends i4 {
             </text>
           `
     )}
-        ${layout.isTemperature || layout.panelKey === "precipitation" ? layout.bars.map(
+        ${layout.isTemperature || layout.panelKey === "precipitation" || layout.panelKey === "wind" ? layout.bars.map(
       (bar) => w`
                 <rect
                   class="chart-column-hitbox"
@@ -6293,6 +7112,15 @@ var WeatherRiskBridgeCard = class extends i4 {
         stormSeries: panelVm?._precipitationStormSeriesBridge ?? null
       }
     ) : "Peak risk within the selected window";
+    // Legend only lists markers actually drawn on this chart.
+    const precipitationLegend = layout.panelKey === "wind" ? [
+      layout.tornadoBars?.length || layout.tornadoTrace ? { key: "wind", label: "Wind" } : null,
+      layout.tornadoBars?.length ? { key: "tornado-core", label: "Tornado" } : layout.tornadoTrace ? { key: "tornado-trace", label: "Tornado" } : null
+    ].filter(Boolean) : isPrecipitationPanel ? [
+      layout.stormTrace ? { key: "storm-trace", label: "Storm" } : layout.precipitation?.stormCaps?.length && isRainPrimaryPrecipitation ? { key: "storm-cap", label: "Storm" } : null,
+      layout.hailMarks?.length ? { key: "hail", label: "Hail (est.)" } : null,
+      layout.hailMarks?.some((mark) => mark.flagged) ? { key: "hail-flag", label: "NWS hail flag" } : null
+    ].filter(Boolean) : [];
     return b2`
       <section
         class="panel"
@@ -6318,7 +7146,23 @@ var WeatherRiskBridgeCard = class extends i4 {
                     ${header ? temperatureDensityHint : riskHelperCopy}
                   </span>
                 </span>
-                <span class="rowpeak">${panelVm?.peakDisplay ?? ""}</span>
+                ${precipitationLegend.length > 0 ? b2`
+                      <span class="rowpeak-stack">
+                        <span class="rowpeak">${panelVm?.peakDisplay ?? ""}</span>
+                        <span class="chart-legend" aria-label="Chart markers">
+                          ${precipitationLegend.map(
+      (item) => b2`
+                              <span class="chart-legend-item" data-legend=${item.key}>
+                                <svg class="chart-legend-swatch" viewBox="0 0 16 10" aria-hidden="true">
+                                  ${item.key === "wind" ? w`<rect x="1" y="1.5" width="14" height="7" rx="2" fill="rgb(56, 186, 160)"></rect><path class="chart-wind-streak" d="M 2.5 5 H 10 C 12.6 5, 13.4 2.4, 11.6 1.8 C 10.4 1.4, 9.6 2.6, 10.4 3.4"></path>` : item.key === "tornado-core" ? w`<rect x="5" y="0.5" width="6" height="9" rx="1.5" fill="rgb(200, 110, 226)"></rect>` : item.key === "tornado-trace" ? w`<path class="chart-tornado-trace" d="M 1 7 C 5 7, 6 2, 9 2 S 13 6, 15 5" fill="none"></path>` : item.key === "storm-cap" ? w`<rect class="chart-storm-cap" x="2" y="3.5" width="12" height="3" rx="1.5" fill="rgba(255, 214, 110, 0.95)"></rect>` : item.key === "storm-trace" ? w`<path class="chart-storm-trace" d="M 1 7 C 5 7, 6 2, 9 2 S 13 6, 15 5" fill="none"></path>` : item.key === "hail-flag" ? w`<g class="chart-hail-mark" data-flagged="true"><circle cx="5.5" cy="5" r="2"></circle><circle cx="10.5" cy="5" r="2"></circle></g>` : w`<g class="chart-hail-mark" data-flagged="false"><circle cx="5.5" cy="5" r="2"></circle><circle cx="10.5" cy="5" r="2"></circle></g>`}
+                                </svg>
+                                ${item.label}
+                              </span>
+                            `
+    )}
+                        </span>
+                      </span>
+                    ` : b2`<span class="rowpeak">${panelVm?.peakDisplay ?? ""}</span>`}
               `}
         </div>
         ${i6(
@@ -6575,14 +7419,14 @@ WeatherRiskBridgeCard.styles = i`
 
     .hero-alert-chip[data-tone="warning"] {
       color: rgba(255, 223, 214, 0.98);
-      background: rgba(255, 112, 83, 0.12);
-      border-color: rgba(255, 112, 83, 0.24);
     }
 
     .hero-alert-chip[data-tone="watch"] {
-      color: rgba(255, 225, 172, 0.96);
-      background: rgba(255, 181, 78, 0.12);
-      border-color: rgba(255, 181, 78, 0.22);
+      color: rgba(255, 228, 180, 0.98);
+      background:
+        linear-gradient(rgba(255, 181, 78, 0.18), rgba(255, 181, 78, 0.18)),
+        rgba(30, 24, 16, 0.66);
+      border-color: rgba(255, 181, 78, 0.38);
     }
 
     .hero-detail-grid {
@@ -6855,6 +7699,14 @@ WeatherRiskBridgeCard.styles = i`
       min-width: 0;
     }
 
+    .hero-pill-triple {
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(0, 0.95fr);
+    }
+
+    .hero-pill-triple .detail-pill {
+      padding-inline: 7px 8px;
+    }
+
     .hero-pill-pair .detail-pill {
       width: 100%;
       min-width: 0;
@@ -6880,8 +7732,21 @@ WeatherRiskBridgeCard.styles = i`
       padding: 4px 9px;
       font-size: 0.66rem;
       letter-spacing: 0.02em;
-      background: rgba(255, 183, 76, 0.1);
-      border-color: rgba(255, 183, 76, 0.16);
+      /* Dark base under the amber tint keeps chips legible on bright scenes. */
+      background:
+        linear-gradient(rgba(255, 183, 76, 0.16), rgba(255, 183, 76, 0.16)),
+        rgba(30, 24, 16, 0.66);
+      border-color: rgba(255, 183, 76, 0.34);
+      text-shadow: 0 1px 2px rgba(10, 14, 24, 0.5);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .hero-alert-chip[data-tone="warning"] {
+      background:
+        linear-gradient(rgba(255, 112, 83, 0.18), rgba(255, 112, 83, 0.18)),
+        rgba(40, 18, 16, 0.66);
+      border-color: rgba(255, 112, 83, 0.4);
     }
 
     .card-hero[data-scene="clear_day"] {
@@ -7619,14 +8484,26 @@ WeatherRiskBridgeCard.styles = i`
       color: rgba(255, 215, 128, 0.98);
     }
 
+    /* Alert pills keep their tint but sit on a dark base so their text stays
+       legible over bright scenes (snow, clear day, fog). */
+    .detail-pill[data-kind$="_alert"] {
+      text-shadow: 0 1px 2px rgba(10, 14, 24, 0.55);
+      backdrop-filter: blur(8px) saturate(1.1);
+      -webkit-backdrop-filter: blur(8px) saturate(1.1);
+    }
+
     .detail-pill[data-kind="fire_alert"] {
-      border-color: rgba(255, 160, 114, 0.22);
-      background: linear-gradient(180deg, rgba(255, 140, 88, 0.52), rgba(255, 109, 82, 0.04));
+      border-color: rgba(255, 160, 114, 0.4);
+      background:
+        linear-gradient(180deg, rgba(255, 140, 88, 0.5), rgba(255, 109, 82, 0.2)),
+        rgba(46, 24, 20, 0.62);
     }
 
     .detail-pill[data-kind="storm_alert"] {
-      border-color: rgba(104, 174, 255, 0.22);
-      background: linear-gradient(180deg, rgba(56, 128, 219, 0.14), rgba(34, 71, 132, 0.05));
+      border-color: rgba(104, 174, 255, 0.34);
+      background:
+        linear-gradient(180deg, rgba(56, 128, 219, 0.26), rgba(34, 71, 132, 0.12)),
+        rgba(16, 26, 46, 0.58);
     }
 
     .detail-pill[data-kind="storm_alert"] ha-icon {
@@ -7634,8 +8511,10 @@ WeatherRiskBridgeCard.styles = i`
     }
 
     .detail-pill[data-kind="flood_alert"] {
-      border-color: rgba(96, 185, 255, 0.24);
-      background: linear-gradient(180deg, rgba(56, 134, 214, 0.2), rgba(29, 79, 143, 0.08));
+      border-color: rgba(96, 185, 255, 0.36);
+      background:
+        linear-gradient(180deg, rgba(56, 134, 214, 0.3), rgba(29, 79, 143, 0.14)),
+        rgba(14, 28, 50, 0.58);
     }
 
     .detail-pill[data-kind="flood_alert"] ha-icon {
@@ -7647,8 +8526,10 @@ WeatherRiskBridgeCard.styles = i`
     }
 
     .detail-pill[data-kind="temperature_alert"] {
-      border-color: rgba(255, 181, 105, 0.24);
-      background: linear-gradient(180deg, rgba(255, 140, 88, 0.52), rgba(255, 109, 82, 0.04));
+      border-color: rgba(255, 181, 105, 0.42);
+      background:
+        linear-gradient(180deg, rgba(255, 140, 88, 0.5), rgba(255, 109, 82, 0.2)),
+        rgba(46, 26, 20, 0.62);
     }
 
     .detail-pill[data-kind="temperature_alert"] ha-icon {
@@ -7986,10 +8867,264 @@ WeatherRiskBridgeCard.styles = i`
       stroke-linejoin: round;
     }
 
+    /* Bars sit ~20% softer so labels, caps and markers read on top of them.
+       Opacity on the group multiplies with any inner layer opacities. */
+    .chart-bar,
+    .chart-wind-sheen,
+    .chart-wind-streaks,
+    .chart-tornado-core {
+      opacity: 0.8;
+    }
+
+    /* Precipitation bars carry caps, hail and rain/snow texture on top, so
+       they sit another 20% softer (0.8 x 0.8). */
+    .chart-bar.chart-precipitation-bar {
+      opacity: 0.64;
+    }
+
     .chart-bar[data-current="true"] {
       stroke: rgba(243, 248, 255, 0.34);
       stroke-width: 2;
       filter: drop-shadow(0 4px 10px rgba(8, 18, 38, 0.32));
+    }
+
+    .chart-line-group {
+      pointer-events: none;
+    }
+
+    .chart-line {
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 3px 8px rgba(8, 18, 38, 0.3));
+    }
+
+    .chart-line-area {
+      stroke: none;
+    }
+
+    .chart-line-feels-like {
+      fill: none;
+      stroke-width: 2;
+      stroke-dasharray: 7 6;
+      stroke-linecap: round;
+      opacity: 0.55;
+    }
+
+    .chart-line-dot {
+      fill: rgba(243, 248, 255, 0.96);
+      stroke: rgba(24, 44, 82, 0.9);
+      stroke-width: 2;
+      filter: drop-shadow(0 3px 8px rgba(8, 18, 38, 0.4));
+    }
+
+    .chart-day-header {
+      fill: rgba(240, 222, 189, 0.6);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    /* Line-mode storm trace: the bar caps' pale-gold "electric" palette,
+       toned down — a soft glow, a slow current pulse, bolt nodes at peaks. */
+    .chart-storm-trace {
+      stroke: rgba(255, 236, 170, 0.78);
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 0 2px rgba(255, 190, 92, 0.32));
+      pointer-events: none;
+    }
+
+    .chart-storm-trace-current {
+      stroke: rgba(255, 248, 214, 0.9);
+      stroke-width: 1.2;
+      stroke-linecap: round;
+      stroke-dasharray: 2 46;
+      animation: storm-trace-current 4.8s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes storm-trace-current {
+      to {
+        stroke-dashoffset: -96;
+      }
+    }
+
+    .chart-storm-node {
+      pointer-events: none;
+    }
+
+    .chart-hail-mark {
+      pointer-events: none;
+    }
+
+    /* Wind panel: probability-shaded teal bars with drifting streaks; tornado
+       as a magenta core / trace on the same axis. */
+    .chart-wind-sheen,
+    .chart-wind-streaks {
+      pointer-events: none;
+    }
+
+    .chart-wind-streak {
+      fill: none;
+      stroke: rgba(240, 255, 250, 0.42);
+      stroke-width: 1.1;
+      stroke-linecap: round;
+    }
+
+    .chart-wind-streak-faint {
+      stroke: rgba(240, 255, 250, 0.22);
+      stroke-width: 0.9;
+    }
+
+    .chart-line-group[data-kind="wind"] .chart-wind-streaks {
+      opacity: 0.55;
+    }
+
+    .chart-wind-gust {
+      stroke: rgba(236, 255, 248, 0.85);
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-dasharray: 14 110;
+      animation: wind-gust-flow 3.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+      pointer-events: none;
+    }
+
+    .chart-wind-gust-trail {
+      stroke: rgba(236, 255, 248, 0.4);
+      stroke-width: 1.2;
+      stroke-dasharray: 8 116;
+      animation-delay: -1.1s;
+    }
+
+    @keyframes wind-gust-flow {
+      from {
+        stroke-dashoffset: 124;
+      }
+      to {
+        stroke-dashoffset: -124;
+      }
+    }
+
+    .chart-tornado-core {
+      stroke: rgba(250, 228, 255, 0.55);
+      stroke-width: 0.6;
+      filter: drop-shadow(0 0 2px rgba(190, 90, 230, 0.45));
+      pointer-events: none;
+    }
+
+    .chart-tornado-trace {
+      stroke: rgba(214, 128, 240, 0.92);
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 5 4;
+      filter: drop-shadow(0 0 2px rgba(190, 90, 230, 0.4));
+      pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chart-wind-gust {
+        animation: none;
+        display: none;
+      }
+    }
+
+    .chart-rain-drop {
+      stroke: rgba(232, 245, 255, 0.62);
+      stroke-width: 1.3;
+      stroke-linecap: round;
+    }
+
+    .chart-rain-drop-faint {
+      stroke: rgba(232, 245, 255, 0.36);
+    }
+
+    .chart-snow-flake {
+      fill: rgba(248, 251, 255, 0.9);
+    }
+
+    .chart-snow-flake-faint {
+      fill: rgba(248, 251, 255, 0.55);
+    }
+
+    .chart-rain-fall {
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    .rowpeak-stack {
+      display: grid;
+      justify-items: end;
+      gap: 6px;
+    }
+
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px 10px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: color-mix(in srgb, var(--primary-text-color, #fff) 62%, transparent);
+    }
+
+    .chart-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .chart-legend-swatch {
+      width: 16px;
+      height: 10px;
+      overflow: visible;
+    }
+
+    .chart-legend-swatch .chart-storm-trace {
+      stroke-width: 1.4;
+    }
+
+    .chart-hail-mark circle {
+      fill: rgba(236, 246, 255, 0.9);
+      stroke: rgba(120, 160, 205, 0.85);
+      stroke-width: 0.6;
+      filter: drop-shadow(0 0 1.5px rgba(200, 228, 255, 0.4));
+    }
+
+    .chart-hail-mark[data-flagged="true"] circle {
+      fill: rgba(246, 251, 255, 1);
+      stroke: rgba(255, 236, 170, 0.9);
+      stroke-width: 0.8;
+      filter: drop-shadow(0 0 2.5px rgba(214, 236, 255, 0.7));
+    }
+
+    .chart-storm-node-halo {
+      fill: rgba(28, 24, 14, 0.82);
+      stroke: rgba(255, 236, 170, 0.7);
+      stroke-width: 0.8;
+      filter: drop-shadow(0 0 3px rgba(255, 196, 96, 0.38));
+    }
+
+    .chart-storm-node-bolt {
+      fill: rgba(255, 238, 176, 0.96);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chart-storm-trace-current {
+        animation: none;
+        display: none;
+      }
+    }
+
+    .chart-day-separator {
+      stroke: rgba(158, 184, 255, 0.3);
+      stroke-width: 1.5;
+      stroke-dasharray: 2 6;
+      stroke-linecap: round;
     }
 
     .chart-precipitation-bar {
@@ -8013,7 +9148,7 @@ WeatherRiskBridgeCard.styles = i`
     }
 
     .chart-precip-bar-streaks {
-      opacity: 0.36;
+      opacity: 0.9;
       mix-blend-mode: screen;
       pointer-events: none;
     }
@@ -8049,7 +9184,7 @@ WeatherRiskBridgeCard.styles = i`
     .chart-precipitation-bar[data-precip-intensity="none"] .chart-precip-bar-cloud,
     .chart-precipitation-bar[data-precip-intensity="none"] .chart-precip-bar-pool,
     .chart-precipitation-bar[data-precip-intensity="none"] .chart-precip-bar-streaks {
-      opacity: 0.22;
+      opacity: 0.6;
     }
 
     .chart-precipitation-bar[data-precip-intensity="light"] .chart-precip-bar-cloud,
@@ -8212,6 +9347,10 @@ WeatherRiskBridgeCard.styles = i`
 
     .chart-feels-like[data-direction="higher"] {
       stroke: rgba(255, 187, 170, 0.98);
+    }
+
+    .panel[data-panel-key="temperature"] .chart-value {
+      font-size: 12px;
     }
 
     .chart-feels-like-value {
@@ -8530,6 +9669,10 @@ WeatherRiskBridgeCard.styles = i`
       }
 
       .hero-pill-pair .detail-pill {
+        min-width: 0;
+      }
+
+      .hero-pill-triple .detail-pill {
         min-width: 0;
       }
 
@@ -8862,13 +10005,28 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
               ${rangeValues().map(
         (value) => b2`
                   <option value=${String(value)}>
-                    ${value === 1 ? "Now / 1h nowcast (when available)" : `${value} hours`}
+                    ${rangeOptionLabel(value)}
                   </option>
                 `
       )}
             </select>
             <div class="help">
               Sets the first horizon shown when the dashboard loads. Now / 1h is capability-gated and will fall back to a strategic range when minute nowcast is unavailable.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="chart_style">Chart style</label>
+            <select
+              id="chart_style"
+              .value=${config.chart_style ?? DEFAULT_CHART_STYLE}
+              @change=${this._handleChartStyleChange}
+            >
+              <option value="bars">Bars (columns)</option>
+              <option value="line">Line</option>
+            </select>
+            <div class="help">
+              Line mode renders each series as a smooth curve with a soft fill instead of bar columns. Bars stay the default.
             </div>
           </div>
 
@@ -8983,6 +10141,21 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
             </select>
             <div class="help">
               Compact shows a few time labels, full shows every label, and off gives the cleanest plot.
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="label_dedupe">Value labels</label>
+            <select
+              id="label_dedupe"
+              .value=${config.label_dedupe ? "on" : "off"}
+              @change=${this._handleLabelDedupeChange}
+            >
+              <option value="off">Show all values</option>
+              <option value="on">Hide repeated values</option>
+            </select>
+            <div class="help">
+              Hide repeated values keeps the first label in a run and only writes the next when the value changes.
             </div>
           </div>
 
@@ -9282,6 +10455,10 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
     const target = event.currentTarget;
     this._updateConfig({ series_layout: target.value === "grid" ? "grid" : "stacked" });
   }
+  _handleChartStyleChange(event) {
+    const target = event.currentTarget;
+    this._updateConfig({ chart_style: target.value === "line" ? "line" : DEFAULT_CHART_STYLE });
+  }
   _handleSeriesColumnsChange(event) {
     const target = event.currentTarget;
     this._updateConfig({ series_columns: Number(target.value) });
@@ -9313,6 +10490,10 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
     this._updateConfig({
       x_axis_labels: target.value === "full" || target.value === "off" ? target.value : DEFAULT_X_AXIS_LABEL_MODE
     });
+  }
+  _handleLabelDedupeChange(event) {
+    const target = event.currentTarget;
+    this._updateConfig({ label_dedupe: target.value === "on" });
   }
   _handleShowYAxisLabelsChange(event) {
     const target = event.currentTarget;
