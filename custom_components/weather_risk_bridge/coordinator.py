@@ -39,7 +39,7 @@ class WeatherRiskBridgeCoordinator(DataUpdateCoordinator[dict]):
     async def _async_update_data(self) -> dict:
         try:
             LOGGER.debug(
-                "Refreshing Weather Risk Bridge data lat=%s lon=%s label=%s wind_threshold_mph=%s",
+                "Refreshing Weather Risk Suite data lat=%s lon=%s label=%s wind_threshold_mph=%s",
                 self._config[CONF_LATITUDE],
                 self._config[CONF_LONGITUDE],
                 self._config.get(CONF_LABEL),
@@ -53,17 +53,17 @@ class WeatherRiskBridgeCoordinator(DataUpdateCoordinator[dict]):
             )
         except ClientResponseError as err:
             if err.status == 401:
-                LOGGER.error("Weather Risk Bridge rejected the configured bearer token")
+                LOGGER.error("Weather Risk Suite rejected the configured bearer token")
                 raise ConfigEntryAuthFailed("Service rejected bearer token") from err
             message = None
             with suppress(Exception):
                 message = str(err.message)
             LOGGER.warning(
-                "Weather Risk Bridge refresh failed with HTTP %s%s",
+                "Weather Risk Suite refresh failed with HTTP %s%s",
                 err.status,
                 f": {message}" if message else "",
             )
             raise UpdateFailed(f"Service request failed: {err.status}") from err
         except Exception as err:
-            LOGGER.exception("Unexpected Weather Risk Bridge refresh failure")
+            LOGGER.exception("Unexpected Weather Risk Suite refresh failure")
             raise UpdateFailed(str(err)) from err

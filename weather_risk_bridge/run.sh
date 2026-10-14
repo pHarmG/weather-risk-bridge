@@ -12,5 +12,5 @@ else
   unset WEATHER_RISK_BRIDGE_TOKEN || true
 fi
 
-bashio::log.info "Starting Weather Risk Bridge on port ${WEATHER_RISK_BRIDGE_PORT}"
+bashio::log.info "Starting Weather Risk Suite on port ${WEATHER_RISK_BRIDGE_PORT}"
 exec weather-risk-bridge

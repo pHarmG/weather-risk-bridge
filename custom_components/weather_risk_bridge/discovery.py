@@ -1,4 +1,4 @@
-"""Discover a same-host Weather Risk Bridge app URL via Supervisor."""
+"""Discover a same-host Weather Risk Suite app URL via Supervisor."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from .const import DEFAULT_SERVICE_URL, DOMAIN
 
 LOGGER = logging.getLogger(__name__)
 
-_APP_NAME = "Weather Risk Bridge"
+# Display names this app has shipped under (renamed in 0.2.4).
+_APP_NAMES = ("Weather Risk Suite", "Weather Risk Bridge")
 _APP_SLUG_HINT = "weather_risk_bridge"
 _APP_PORT = 8099
 
@@ -22,7 +23,7 @@ async def async_resolve_default_service_url(hass: HomeAssistant) -> str:
     """Prefer a reachable same-host app URL; fall back to the documented default."""
     discovered = await async_discover_local_app_service_url(hass)
     if discovered:
-        LOGGER.info("Discovered Weather Risk Bridge service at %s", discovered)
+        LOGGER.info("Discovered Weather Risk Suite service at %s", discovered)
         return discovered
     return DEFAULT_SERVICE_URL
 
@@ -67,7 +68,7 @@ async def async_discover_local_app_service_url(hass: HomeAssistant) -> str | Non
 
     state = str(info.get("state") or match.get("state") or "").lower()
     if state and state not in {"started", "running"}:
-        LOGGER.debug("Weather Risk Bridge app found but state=%s", state)
+        LOGGER.debug("Weather Risk Suite app found but state=%s", state)
         return None
 
     ip_address = info.get("ip_address") or match.get("ip_address")
@@ -101,7 +102,7 @@ def _find_weather_app(addons: list[dict[str, Any]]) -> dict[str, Any] | None:
     for addon in addons:
         slug = str(addon.get("slug") or "")
         name = str(addon.get("name") or "")
-        if _APP_SLUG_HINT in slug or name == _APP_NAME or DOMAIN in slug:
+        if _APP_SLUG_HINT in slug or name in _APP_NAMES or DOMAIN in slug:
             return addon
     return None
 

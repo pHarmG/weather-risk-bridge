@@ -16,8 +16,8 @@ COPY run.sh /
 RUN chmod a+x /run.sh
 
 LABEL \
-  io.hass.name="Weather Risk Bridge" \
-  io.hass.description="NOAA/SPC companion service for Weather Risk Bridge" \
+  io.hass.name="Weather Risk Suite" \
+  io.hass.description="NOAA/SPC companion service for Weather Risk Suite" \
   io.hass.type="addon" \
   io.hass.version="0.1.0" \
   io.hass.arch="amd64|aarch64|armv7"

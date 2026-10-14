@@ -1,11 +1,11 @@
-# Weather Risk Bridge
+# Weather Risk Suite
 
 **See the storm risk for *your* coordinates — not a city-average forecast tile.**
 
-Weather Risk Bridge is a Home Assistant **app + integration + Lovelace card** that turns official US weather risk data into a dashboard you can actually act on: temperature, feels-like, rain, storms, wind, hail, and tornado outlook — at the lat/lon you care about.
+Weather Risk Suite is a Home Assistant **app + integration + Lovelace card** that turns official US weather risk data into a dashboard you can actually act on: temperature, feels-like, rain, storms, wind, hail, and tornado outlook — at the lat/lon you care about.
 
 <p align="center">
-  <img src="docs/media/hero-banner.webp" alt="Weather Risk Bridge card — quiet day, active weather, and storm night previews" width="100%" />
+  <img src="docs/media/hero-banner.webp" alt="Weather Risk Suite card — quiet day, active weather, and storm night previews" width="100%" />
 </p>
 
 | Quiet conditions | Active weather | Storm risk |
@@ -18,7 +18,7 @@ Weather Risk Bridge is a Home Assistant **app + integration + Lovelace card** th
 
 ## Why install this?
 
-Most HA weather cards answer “what’s the temperature?” Weather Risk Bridge answers **“do I need to care in the next few hours?”**
+Most HA weather cards answer “what’s the temperature?” Weather Risk Suite answers **“do I need to care in the next few hours?”**
 
 - **Risk, not just conditions** — rain chance, thunderstorm probability, strong-wind thresholds, hail & tornado outlook from SPC, plus NWS alerts — in one card.
 - **Your pin on the map** — you enter latitude/longitude once. Cabins, farms, and second homes work the same as “home.”
@@ -28,7 +28,7 @@ Most HA weather cards answer “what’s the temperature?” Weather Risk Bridge
 
 ### The companion app is the product core
 
-The Lovelace card is the face. The **Weather Risk Bridge app** (formerly “add-on”) is the engine:
+The Lovelace card is the face. The **Weather Risk Suite app** (formerly “add-on”) is the engine:
 
 1. Talks to NWS / SPC (and optional WeatherKit nowcast) for the coordinates HA sends.
 2. Caches and shapes a single `/v1/snapshot` payload.
@@ -76,7 +76,7 @@ Skip this section if you are using [Docker instead](#docker-alternative-separate
 
 ### 1.2 Install the app
 
-1. In the App store, search for **Weather Risk Bridge**.
+1. In the App store, search for **Weather Risk Suite**.
 2. Open it → click **Install** and wait until install finishes (first build can take a few minutes).
 3. Leave **Start on boot** enabled (recommended).
 4. Optional but useful: enable **Watchdog** so Supervisor restarts the app if it crashes.
@@ -125,9 +125,9 @@ Fallbacks only if the field is empty or the auto-filled URL fails:
 2. Menu (**⋮**) → **Custom repositories**.
 3. Repository: `https://github.com/pHarmG/weather-risk-bridge`
 4. Category: **Integration** → **Add**.
-5. Search for **Weather Risk Bridge** → **Download** / **Install**.
+5. Search for **Weather Risk Suite** → **Download** / **Install**.
 6. When HACS finishes, **restart Home Assistant** (**Settings → System → Restart**).
-7. After restart, confirm under **Settings → Devices & Services** that you can **Add Integration** and see **Weather Risk Bridge** in the search list.
+7. After restart, confirm under **Settings → Devices & Services** that you can **Add Integration** and see **Weather Risk Suite** in the search list.
 
 The Lovelace card JavaScript is bundled with the integration and auto-registered in storage-mode Lovelace. You do not copy files into `/config/www` for the normal install path.
 
@@ -135,10 +135,10 @@ The Lovelace card JavaScript is bundled with the integration and auto-registered
 
 ## Step 3 — Configure your location (coordinates)
 
-This is the step that points Weather Risk Bridge at **your** place.
+This is the step that points Weather Risk Suite at **your** place.
 
 1. Go to **Settings → Devices & Services → Add Integration**.
-2. Search for **Weather Risk Bridge** and open it.
+2. Search for **Weather Risk Suite** and open it.
 3. Fill in the form:
 
 | Field | What to enter |
@@ -157,7 +157,7 @@ This is the step that points Weather Risk Bridge at **your** place.
 
 Use any of these:
 
-- **Home Assistant’s own location:** **Settings → System → General** shows the home latitude/longitude. The Weather Risk Bridge form usually **pre-fills** those values — change them if this card should track a different place.
+- **Home Assistant’s own location:** **Settings → System → General** shows the home latitude/longitude. The Weather Risk Suite form usually **pre-fills** those values — change them if this card should track a different place.
 - **Google Maps:** right-click your address → the first two numbers are latitude and longitude (copy both).
 - **gps-coordinates.net** or similar: search your address and copy the decimal pair.
 
@@ -169,7 +169,7 @@ Tips:
 
 ### Reconfigure later
 
-**Settings → Devices & Services → Weather Risk Bridge → Configure / Reconfigure** (or the integration options) to change coordinates, label, service URL, token, or wind threshold.
+**Settings → Devices & Services → Weather Risk Suite → Configure / Reconfigure** (or the integration options) to change coordinates, label, service URL, token, or wind threshold.
 
 You can also set or update a location from the **card editor** → **Location setup** (same fields: label, latitude, longitude, service URL, token, wind threshold).
 
@@ -178,7 +178,7 @@ You can also set or update a location from the **card editor** → **Location se
 ## Step 4 — Add the Lovelace card
 
 1. Open a dashboard → **Edit** → **Add card**.
-2. Choose **Weather Risk Bridge** (or add via YAML below).
+2. Choose **Weather Risk Suite** (or add via YAML below).
 3. Set **Configured location** / **Location key** to the slug from your label (for example `home` for label `Home`).
 
 YAML example:

@@ -5920,7 +5920,7 @@ var WeatherRiskBridgeCard = class extends i4 {
         show_alerts: "Show alert chips"
       })[schema.name],
       computeHelper: (schema) => ({
-        entity: "Any chart sensor of the Weather Risk Bridge location to show.",
+        entity: "Any chart sensor of the Weather Risk Suite location to show.",
         default_range: "5 days appears once the companion app provides it.",
         chart_style: "Line is smoother; bars add storm caps and hail per bar.",
         probability_axis_mode: "Adaptive keeps low risk legible.",
@@ -6033,7 +6033,7 @@ var WeatherRiskBridgeCard = class extends i4 {
       return b2`
         <ha-card>
           <div class="missing">
-            Weather Risk data is currently unavailable. Check the Weather Risk Bridge service and HA integration logs.
+            Weather Risk data is currently unavailable. Check the Weather Risk Suite service and HA integration logs.
           </div>
         </ha-card>
       `;
@@ -9861,13 +9861,13 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
                 .value=${config.location ?? ""}
                 @change=${this._handleLocationSelect}
               >
-                <option value="">Select a Weather Risk Bridge location</option>
+                <option value="">Select a Weather Risk Suite location</option>
                 ${locationOptions.map(
         (option) => b2`<option value=${option.key} ?selected=${option.key === (config.location ?? "")}>${option.label}</option>`
       )}
               </select>
               <div class="help">
-                Picks from the Weather Risk Bridge entities Home Assistant already knows about.
+                Picks from the Weather Risk Suite entities Home Assistant already knows about.
               </div>
             </div>
 
@@ -9881,7 +9881,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
                 @input=${this._handleLocationInput}
               />
               <div class="help">
-                Portable Weather Risk Bridge slug, such as <code>home</code> or <code>austin_tx</code>.
+                Portable Weather Risk Suite slug, such as <code>home</code> or <code>austin_tx</code>.
               </div>
             </div>
 
@@ -9900,7 +9900,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
 
             ${locationOptions.length === 0 && entityOptions.length === 0 ? b2`
                   <div class="warning">
-                    No Weather Risk Bridge entities were found in Home Assistant yet. Use the code editor or add the Weather Risk Bridge integration/entities first.
+                    No Weather Risk Suite entities were found in Home Assistant yet. Use the code editor or add the Weather Risk Suite integration/entities first.
                   </div>
                 ` : A}
           </div>
@@ -10135,7 +10135,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
       return b2`
         <div class="form">
           <div class="warning">
-            Weather Risk Bridge visual editor failed to render: ${message}. Use the code editor until the visual editor is recovered.
+            Weather Risk Suite visual editor failed to render: ${message}. Use the code editor until the visual editor is recovered.
           </div>
         </div>
       `;
@@ -10186,7 +10186,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
     } catch (error) {
       this._locationStatus = {
         tone: "error",
-        message: error instanceof Error ? error.message : "Failed to load the selected Weather Risk Bridge location."
+        message: error instanceof Error ? error.message : "Failed to load the selected Weather Risk Suite location."
       };
     }
   }
@@ -10235,7 +10235,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
       this._hasLoadedLocationManager = true;
       this._locationStatus = options.status ?? null;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load Weather Risk Bridge locations.";
+      const message = error instanceof Error ? error.message : "Failed to load Weather Risk Suite locations.";
       this._locationStatus = {
         tone: "error",
         message
@@ -10278,7 +10278,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
     this._savingLocation = true;
     this._locationStatus = {
       tone: "info",
-      message: "Saving Weather Risk Bridge location..."
+      message: "Saving Weather Risk Suite location..."
     };
     try {
       const isExistingLocation = Boolean(this._locationForm.entry_id);
@@ -10296,7 +10296,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
         const errorKey = response.errors?.base;
         this._locationStatus = {
           tone: "error",
-          message: errorKey === "cannot_connect" ? "Weather Risk Bridge could not connect to the configured service URL." : "Home Assistant rejected the Weather Risk Bridge location settings."
+          message: errorKey === "cannot_connect" ? "Weather Risk Suite could not connect to the configured service URL." : "Home Assistant rejected the Weather Risk Suite location settings."
         };
         this._locationDefaults = flowDefaultsFromSchema(response.data_schema, this._locationDefaults);
         this._locationForm = {
@@ -10318,11 +10318,11 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
         preserveForm: false,
         status: {
           tone: "success",
-          message: isExistingLocation ? `Updated Weather Risk Bridge location "${expectedTitle}".` : `Created Weather Risk Bridge location "${expectedTitle}".`
+          message: isExistingLocation ? `Updated Weather Risk Suite location "${expectedTitle}".` : `Created Weather Risk Suite location "${expectedTitle}".`
         }
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save Weather Risk Bridge location.";
+      const message = error instanceof Error ? error.message : "Failed to save Weather Risk Suite location.";
       this._locationStatus = {
         tone: "error",
         message
@@ -10571,7 +10571,7 @@ var customCards = window.customCards ?? [];
 if (!customCards.some((card) => card.type === CARD_TYPE)) {
   customCards.push({
     type: CARD_TYPE,
-    name: "Weather Risk Bridge",
+    name: "Weather Risk Suite",
     description: "Graph weather risk probabilities and temperature across selectable horizons.",
     preview: true
   });

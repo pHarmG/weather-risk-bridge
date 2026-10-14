@@ -1,6 +1,6 @@
-# Weather Risk Bridge App
+# Weather Risk Suite App
 
-The companion engine for **Weather Risk Bridge**: official US weather risk (NWS + SPC) for *your* latitude/longitude, served to Home Assistant as a single snapshot API.
+The companion engine for **Weather Risk Suite**: official US weather risk (NWS + SPC) for *your* latitude/longitude, served to Home Assistant as a single snapshot API.
 
 ![Storm / active card preview](https://raw.githubusercontent.com/pHarmG/weather-risk-bridge/main/docs/media/hero-storm-night.webp)
 
@@ -31,7 +31,7 @@ Keep that discovered `172.30.x.x` address — it is the correct same-host URL. T
 ## Install and verify (do not skip)
 
 1. **Settings → Apps → App store → ⋮ → Repositories** → add `https://github.com/pHarmG/weather-risk-bridge`.
-2. Open **Weather Risk Bridge** → **Install** (first build can take several minutes).
+2. Open **Weather Risk Suite** → **Install** (first build can take several minutes).
 3. Enable **Start on boot** (and optionally **Watchdog**).
 4. Optional **Configuration**: set `token` only if you want bearer auth; leave `port` at `8099` unless you have a conflict.
 5. **Start** the app.
@@ -44,8 +44,8 @@ If you prefer the API on a **different computer** than Home Assistant, skip this
 
 The app does **not** store your home coordinates. Enter them in the integration:
 
-1. Install **Weather Risk Bridge** via HACS (same GitHub repository) and restart Home Assistant.
-2. **Settings → Devices & Services → Add Integration → Weather Risk Bridge**.
+1. Install **Weather Risk Suite** via HACS (same GitHub repository) and restart Home Assistant.
+2. **Settings → Devices & Services → Add Integration → Weather Risk Suite**.
 3. Service URL: leave the auto-filled `http://172.30.x.x:8099` value (or use `http://HOME_ASSISTANT_HOST_IP:8099` if blank).
 4. Set **Label**, **Latitude**, and **Longitude** (decimal degrees; US west longitudes are negative). Copy from **Settings → System → General**, Google Maps (right-click), or a lat/lon lookup site.
 5. Add the Lovelace card with `location:` matching your label slug (for example `home`).

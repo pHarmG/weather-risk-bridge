@@ -120,7 +120,7 @@ class WeatherRiskBridgeSensor(CoordinatorEntity, SensorEntity):
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": self._entry.runtime_data.title,
-            "manufacturer": "Weather Risk Bridge",
+            "manufacturer": "Weather Risk Suite",
             "model": "NOAA Service",
         }
 

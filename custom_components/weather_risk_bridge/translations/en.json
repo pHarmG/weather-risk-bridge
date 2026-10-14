@@ -5,13 +5,13 @@
       "reconfigure_successful": "Configuration updated."
     },
     "error": {
-      "cannot_connect": "Failed to connect to the Weather Risk Bridge service. On Home Assistant OS, use the discovered http://172.30.x.x:8099 app IP (or http://HOME_ASSISTANT_HOST_IP:8099). The weather-risk-bridge hostname often does not resolve.",
+      "cannot_connect": "Failed to connect to the Weather Risk Suite service. On Home Assistant OS, use the discovered http://172.30.x.x:8099 app IP (or http://HOME_ASSISTANT_HOST_IP:8099). The weather-risk-bridge hostname often does not resolve.",
       "unknown": "Unexpected error."
     },
     "step": {
       "user": {
-        "title": "Weather Risk Bridge",
-        "description": "Connect to the Weather Risk Bridge service and set the US location to track.\n\nService URL: leave the auto-filled value when present (http://172.30.x.x:8099 on Home Assistant OS). That Supervisor app IP is correct. If the field is empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
+        "title": "Weather Risk Suite",
+        "description": "Connect to the Weather Risk Suite service and set the US location to track.\n\nService URL: leave the auto-filled value when present (http://172.30.x.x:8099 on Home Assistant OS). That Supervisor app IP is correct. If the field is empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
@@ -22,7 +22,7 @@
         }
       },
       "reconfigure": {
-        "title": "Reconfigure Weather Risk Bridge",
+        "title": "Reconfigure Weather Risk Suite",
         "description": "Update the service connection and latitude/longitude. Keep a discovered http://172.30.x.x:8099 app IP when present.",
         "data": {
           "service_url": "Service URL",
@@ -38,7 +38,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Weather Risk Bridge options",
+        "title": "Weather Risk Suite options",
         "description": "Update the service connection and latitude/longitude. Keep a discovered http://172.30.x.x:8099 app IP when present.",
         "data": {
           "service_url": "Service URL",

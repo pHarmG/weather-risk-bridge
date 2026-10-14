@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = WeatherRiskBridgeCoordinator(hass, client, config)
     await coordinator.async_config_entry_first_refresh()
     _LOGGER.info(
-        "Configured Weather Risk Bridge entry '%s' using service %s",
+        "Configured Weather Risk Suite entry '%s' using service %s",
         entry_title_from_config(config),
         config[CONF_SERVICE_URL],
     )
@@ -67,11 +67,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        _LOGGER.info("Unloaded Weather Risk Bridge entry '%s'", entry.title)
+        _LOGGER.info("Unloaded Weather Risk Suite entry '%s'", entry.title)
     return unloaded
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    _LOGGER.info("Reloading Weather Risk Bridge entry '%s'", entry.title)
+    _LOGGER.info("Reloading Weather Risk Suite entry '%s'", entry.title)
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)

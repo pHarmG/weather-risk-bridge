@@ -44,7 +44,7 @@ class WeatherRiskBridgeClient:
         path: str,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        LOGGER.debug("Requesting Weather Risk Bridge path=%s params=%s", path, params)
+        LOGGER.debug("Requesting Weather Risk Suite path=%s params=%s", path, params)
         headers = {}
         if self._bearer_token:
             headers["Authorization"] = f"Bearer {self._bearer_token}"
@@ -56,7 +56,7 @@ class WeatherRiskBridgeClient:
             if response.status >= 400:
                 message = await response.text()
                 LOGGER.warning(
-                    "Weather Risk Bridge request failed path=%s status=%s",
+                    "Weather Risk Suite request failed path=%s status=%s",
                     path,
                     response.status,
                 )
@@ -68,5 +68,5 @@ class WeatherRiskBridgeClient:
                     headers=response.headers,
                 )
             payload = await response.json()
-            LOGGER.debug("Weather Risk Bridge response received path=%s", path)
+            LOGGER.debug("Weather Risk Suite response received path=%s", path)
             return payload

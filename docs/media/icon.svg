@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sky" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#3d5bd9"/>
+      <stop offset="0.55" stop-color="#2a3a9e"/>
+      <stop offset="1" stop-color="#161d52"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.72" cy="0.3" r="0.55">
+      <stop offset="0" stop-color="#ffd27a" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#ffb347" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#ffb347" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sun" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#fff1c4"/>
+      <stop offset="0.6" stop-color="#ffcc5c"/>
+      <stop offset="1" stop-color="#ffa63d"/>
+    </radialGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dbe6ff"/>
+    </linearGradient>
+    <linearGradient id="barTeal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7fe3cc"/>
+      <stop offset="1" stop-color="#2fae95"/>
+    </linearGradient>
+    <linearGradient id="barBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9fd8ff"/>
+      <stop offset="1" stop-color="#4a96e6"/>
+    </linearGradient>
+    <linearGradient id="barAmber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd98a"/>
+      <stop offset="1" stop-color="#f29a3a"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0a0f33" flood-opacity="0.45"/>
+    </filter>
+    <radialGradient id="vignette" cx="0.5" cy="1.05" r="0.75">
+      <stop offset="0" stop-color="#0b1038" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#0b1038" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile"><rect x="16" y="16" width="480" height="480" rx="112"/></clipPath>
+  </defs>
+
+  <!-- tile -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#sky)"/>
+  <g clip-path="url(#tile)">
+    <rect x="16" y="16" width="480" height="480" fill="url(#glow)"/>
+    <!-- soft lower vignette -->
+    <rect x="16" y="16" width="480" height="480" fill="url(#vignette)"/>
+  </g>
+  <rect x="17.5" y="17.5" width="477" height="477" rx="110.5" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="3"/>
+
+  <!-- sun -->
+  <circle cx="330" cy="156" r="70" fill="url(#sun)"/>
+
+  <!-- cloud -->
+  <path filter="url(#soft)" fill="url(#cloud)" transform="translate(0 -16)"
+    d="M150 312
+       C112 312 92 286 92 258
+       C92 228 116 206 146 206
+       C152 168 186 140 228 140
+       C268 140 300 164 310 200
+       C316 198 322 197 330 197
+       C364 197 390 223 390 255
+       C390 287 364 312 332 312 Z"/>
+
+  <!-- forecast bars -->
+  <g filter="url(#soft)">
+    <rect x="166" y="370" width="42" height="62" rx="13" fill="url(#barTeal)"/>
+    <rect x="235" y="350" width="42" height="82" rx="13" fill="url(#barBlue)"/>
+    <rect x="304" y="326" width="42" height="106" rx="13" fill="url(#barAmber)"/>
+  </g>
+</svg>

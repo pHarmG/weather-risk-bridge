@@ -44,7 +44,7 @@ def _build_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 async def _validate_input(hass, data: dict[str, Any]) -> None:
     LOGGER.info(
-        "Validating Weather Risk Bridge config for service %s",
+        "Validating Weather Risk Suite config for service %s",
         data[CONF_SERVICE_URL],
     )
     session = async_get_clientsession(hass)
@@ -80,13 +80,13 @@ class WeatherRiskBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await _validate_input(self.hass, user_input)
             except ClientError as err:
                 LOGGER.warning(
-                    "Weather Risk Bridge config flow could not connect to %s: %s",
+                    "Weather Risk Suite config flow could not connect to %s: %s",
                     user_input[CONF_SERVICE_URL],
                     err,
                 )
                 errors["base"] = "cannot_connect"
             except Exception:
-                LOGGER.exception("Unexpected Weather Risk Bridge config flow failure")
+                LOGGER.exception("Unexpected Weather Risk Suite config flow failure")
                 errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(
@@ -113,13 +113,13 @@ class WeatherRiskBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await _validate_input(self.hass, user_input)
             except ClientError as err:
                 LOGGER.warning(
-                    "Weather Risk Bridge reconfigure could not connect to %s: %s",
+                    "Weather Risk Suite reconfigure could not connect to %s: %s",
                     user_input[CONF_SERVICE_URL],
                     err,
                 )
                 errors["base"] = "cannot_connect"
             except Exception:
-                LOGGER.exception("Unexpected Weather Risk Bridge reconfigure failure")
+                LOGGER.exception("Unexpected Weather Risk Suite reconfigure failure")
                 errors["base"] = "unknown"
             else:
                 self.hass.config_entries.async_update_entry(
@@ -161,13 +161,13 @@ class WeatherRiskBridgeOptionsFlow(config_entries.OptionsFlow):
                 await _validate_input(self.hass, user_input)
             except ClientError as err:
                 LOGGER.warning(
-                    "Weather Risk Bridge options flow could not connect to %s: %s",
+                    "Weather Risk Suite options flow could not connect to %s: %s",
                     user_input[CONF_SERVICE_URL],
                     err,
                 )
                 errors["base"] = "cannot_connect"
             except Exception:
-                LOGGER.exception("Unexpected Weather Risk Bridge options flow failure")
+                LOGGER.exception("Unexpected Weather Risk Suite options flow failure")
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(title="", data=user_input)

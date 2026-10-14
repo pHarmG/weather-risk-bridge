@@ -1,8 +1,8 @@
-name: Weather Risk Bridge
-version: "0.2.0"
+name: Weather Risk Suite
+version: "0.2.4"
 slug: weather_risk_bridge
 description: >
-  NOAA/SPC companion API for the Weather Risk Bridge Home Assistant integration
+  NOAA/SPC companion API for the Weather Risk Suite Home Assistant integration
   and Lovelace card. US locations only.
 url: "https://github.com/pHarmG/weather-risk-bridge"
 arch:
@@ -16,7 +16,7 @@ hostname: weather-risk-bridge
 ports:
   8099/tcp: 8099
 ports_description:
-  8099/tcp: Weather Risk Bridge HTTP API (/healthz, /v1/snapshot)
+  8099/tcp: Weather Risk Suite HTTP API (/healthz, /v1/snapshot)
 options:
   port: 8099
   token: ""

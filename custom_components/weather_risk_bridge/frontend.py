@@ -58,7 +58,7 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     www_dir = Path(__file__).parent / "www"
     if not www_dir.is_dir():
         _LOGGER.warning(
-            "Weather Risk Bridge www/ is missing; Lovelace card will not be served"
+            "Weather Risk Suite www/ is missing; Lovelace card will not be served"
         )
         return
 
@@ -144,4 +144,4 @@ async def _async_register_lovelace_resource(hass: HomeAssistant) -> None:
         await resources.async_create_item({"res_type": "module", "url": card_url})
         _LOGGER.info("Registered Lovelace resource %s", card_url)
     except Exception:  # noqa: BLE001
-        _LOGGER.exception("Failed to register Weather Risk Bridge Lovelace resource")
+        _LOGGER.exception("Failed to register Weather Risk Suite Lovelace resource")

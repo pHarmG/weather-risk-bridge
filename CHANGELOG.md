@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Renamed to **Weather Risk Suite** everywhere you see it: the integration, the companion app, the card picker, setup dialogs, and docs. Internal identifiers are unchanged (`weather_risk_bridge` domain, `sensor.weather_risk_bridge_*` entities, `custom:weather-risk-bridge-card`), so existing dashboards and automations keep working. App discovery recognises both the old and new names.
+- New icon for the integration and companion app: a sun and cloud over rising forecast bars, replacing the old bridge artwork.
+- The companion app version now tracks the integration (0.2.4).
+
 ## 0.2.3
 
 - Restore the hero layout: the wind, humidity, dew point and UVI pills stay in the left column again on cards narrower than 545px, keeping the lower-right open so the weather scene shows. 0.2.2 had stretched them across the full hero. On narrower cards the pills now tighten (smaller icon, padding and value text) so values still fit; only phone-width cards (450px and below) let the row span the full width.

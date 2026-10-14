@@ -1,4 +1,4 @@
-# Weather Risk Bridge Service
+# Weather Risk Suite Service
 
 Stateless NOAA-backed companion service for the `weather_risk_bridge` Home Assistant integration.
 

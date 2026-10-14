@@ -9,7 +9,7 @@ from .spc import SpcClient
 
 
 def create_app(settings: Settings) -> FastAPI:
-    app = FastAPI(title="Weather Risk Bridge", version="0.1.0")
+    app = FastAPI(title="Weather Risk Suite", version="0.1.0")
     http_cache = HttpDocumentCache()
     route_cache = SnapshotRouteCache()
     spc_client = SpcClient(http_cache, settings.spc_cache_ttl_seconds)
