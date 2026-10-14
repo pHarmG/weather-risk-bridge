@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Cold-weather alerts (freeze, frost, wind chill, winter, ice, snow) now use a frost palette in the hero: an icy pill with a pale rime edge, and matching frosty alert chips. Heat alerts keep the warm palette.
+- Humidity and dew point pills are more saturated, with stronger borders, so they no longer blend into bright backgrounds.
+
 ## 0.2.0
 
 - Add a "Chart style" card option (`bars` default, `line`). Line mode renders every series panel as a smooth monotone-cubic curve with a soft gradient fill and a highlighted dot on the current period, and draws feels-like temperatures as a dashed secondary curve instead of per-bar dashes. The temperature line samples the same per-degree color palette as the bars via an axis-mapped gradient, so pleasant dips stay green/yellow and hot peaks read orange instead of exaggerating the range. Value labels, tooltips, and tap targets all keep working in both styles. Configurable from the visual card editor and YAML (`chart_style: line`).

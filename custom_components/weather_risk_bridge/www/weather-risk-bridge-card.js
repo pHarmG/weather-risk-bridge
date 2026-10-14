@@ -2251,6 +2251,11 @@ function compactSupplementalAlertText(text) {
   const compact = compactAlertText(text).replace(/\bSevere Thunderstorm\b/gi, "Storm").replace(/\bThunderstorm\b/gi, "Storm").replace(/\bFlash Flood\b/gi, "Flash Flood").replace(/\bAreal Flood\b/gi, "Areal Flood").replace(/\bHydrologic\b/gi, "Hydrology").replace(/\bExcessive Heat\b/gi, "Heat").replace(/\bWinter Weather\b/gi, "Winter").replace(/\bSpecial Weather\b/gi, "Weather").replace(/\s{2,}/g, " ").trim();
   return compact || "Alert";
 }
+// Cold-weather alerts (freeze, frost, wind chill, winter, ice...) get a frost
+// palette; heat alerts keep the warm one.
+function isColdAlertText(text) {
+  return /freeze|frost|cold|wind chill|winter|ice storm|\bice\b|snow|blizzard|sleet/.test(text);
+}
 function buildSupplementalAlertPills(alerts) {
   return alerts.map((alert) => {
     const kind = supplementalAlertKind(alert);
@@ -2267,7 +2272,7 @@ function buildSupplementalAlertPills(alerts) {
       ariaLabel: `${value}. ${detailText}`,
       icon: supplementalAlertIcon(alert),
       badgeTone: supplementalAlertBadgeTone(alert, kind),
-      accent: "default",
+      accent: kind === "temperature_alert" ? isColdAlertText(alertSearchText(alert)) ? "cold" : "heat" : "default",
       detailText,
       isInteractive: true,
       scale: null,
@@ -3968,6 +3973,7 @@ function buildAlertChipViewModels(alerts, maxAlerts, excludedTexts = /* @__PURE_
       compactText,
       title: alert.headline || alert.event || "Alert",
       tone: alert.severityRank >= 3 ? "warning" : alert.severityRank >= 1 ? "watch" : "default",
+      theme: isColdAlertText(alertSearchText(alert)) ? "cold" : "default",
       signature: compactText.toLowerCase()
     };
   }).filter((chip) => !excludedTexts.has(chip.signature)).slice(0, maxAlerts).map(({ signature, ...chip }) => chip);
@@ -5641,6 +5647,7 @@ function renderHeaderAlertChip(chip) {
     <span
       class="hero-alert-chip"
       data-tone=${chip.tone}
+      data-theme=${chip.theme ?? "default"}
       data-node-id=${chip.nodeId}
       data-node-kind="alert-chip"
       title=${chip.title}
@@ -8536,6 +8543,30 @@ WeatherRiskBridgeCard.styles = i`
       color: rgba(255, 209, 126, 0.98);
     }
 
+    /* Frost palette for cold alerts: icy tint on a deep blue base with a pale
+       rime edge, matching the snow/winter scenes. */
+    .detail-pill[data-kind="temperature_alert"][data-accent="cold"] {
+      color: rgba(240, 248, 255, 0.98);
+      border-color: rgba(206, 234, 255, 0.55);
+      background:
+        radial-gradient(120% 140% at 12% 0%, rgba(255, 255, 255, 0.22), transparent 55%),
+        linear-gradient(180deg, rgba(150, 204, 248, 0.5), rgba(88, 146, 214, 0.26)),
+        rgba(16, 34, 62, 0.62);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 14px rgba(170, 220, 255, 0.18);
+    }
+
+    .detail-pill[data-kind="temperature_alert"][data-accent="cold"] ha-icon {
+      color: rgba(214, 240, 255, 0.98);
+    }
+
+    .hero-alert-chip[data-theme="cold"] {
+      color: rgba(226, 242, 255, 0.98);
+      border-color: rgba(196, 228, 255, 0.5);
+      background:
+        linear-gradient(rgba(150, 204, 248, 0.22), rgba(150, 204, 248, 0.22)),
+        rgba(16, 32, 58, 0.66);
+    }
+
     .detail-pill[data-kind="wind"] ha-icon {
       color: rgba(176, 224, 255, 0.95);
     }
@@ -8557,8 +8588,8 @@ WeatherRiskBridgeCard.styles = i`
     /* Moisture milestone fills (RH + dew point): ideal/good → dry → sticky → oppressive → saturated. */
     .detail-pill[data-kind="humidity"][data-accent="humidity-ideal"],
     .detail-pill[data-kind="dew_point"][data-accent="humidity-ideal"] {
-      border-color: rgba(96, 214, 148, 0.3);
-      background: linear-gradient(180deg, rgba(72, 188, 118, 0.46), rgba(36, 110, 72, 0.06));
+      border-color: rgba(96, 214, 148, 0.48);
+      background: linear-gradient(180deg, rgba(72, 188, 118, 0.60), rgba(36, 110, 72, 0.22));
     }
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-ideal"] ha-icon,
@@ -8568,8 +8599,8 @@ WeatherRiskBridgeCard.styles = i`
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-dry"],
     .detail-pill[data-kind="dew_point"][data-accent="humidity-dry"] {
-      border-color: rgba(130, 205, 255, 0.28);
-      background: linear-gradient(180deg, rgba(88, 168, 230, 0.4), rgba(48, 104, 168, 0.06));
+      border-color: rgba(130, 205, 255, 0.46);
+      background: linear-gradient(180deg, rgba(88, 168, 230, 0.54), rgba(48, 104, 168, 0.22));
     }
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-dry"] ha-icon,
@@ -8579,8 +8610,8 @@ WeatherRiskBridgeCard.styles = i`
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-sticky"],
     .detail-pill[data-kind="dew_point"][data-accent="humidity-sticky"] {
-      border-color: rgba(255, 208, 96, 0.3);
-      background: linear-gradient(180deg, rgba(230, 186, 72, 0.44), rgba(150, 118, 36, 0.06));
+      border-color: rgba(255, 208, 96, 0.48);
+      background: linear-gradient(180deg, rgba(230, 186, 72, 0.58), rgba(150, 118, 36, 0.22));
     }
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-sticky"] ha-icon,
@@ -8590,8 +8621,8 @@ WeatherRiskBridgeCard.styles = i`
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-oppressive"],
     .detail-pill[data-kind="dew_point"][data-accent="humidity-oppressive"] {
-      border-color: rgba(255, 164, 104, 0.3);
-      background: linear-gradient(180deg, rgba(255, 140, 88, 0.5), rgba(200, 90, 50, 0.06));
+      border-color: rgba(255, 164, 104, 0.48);
+      background: linear-gradient(180deg, rgba(255, 140, 88, 0.64), rgba(200, 90, 50, 0.22));
     }
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-oppressive"] ha-icon,
@@ -8601,8 +8632,8 @@ WeatherRiskBridgeCard.styles = i`
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-saturated"],
     .detail-pill[data-kind="dew_point"][data-accent="humidity-saturated"] {
-      border-color: rgba(232, 112, 168, 0.32);
-      background: linear-gradient(180deg, rgba(198, 72, 132, 0.52), rgba(120, 36, 96, 0.08));
+      border-color: rgba(232, 112, 168, 0.50);
+      background: linear-gradient(180deg, rgba(198, 72, 132, 0.66), rgba(120, 36, 96, 0.22));
     }
 
     .detail-pill[data-kind="humidity"][data-accent="humidity-saturated"] ha-icon,
