@@ -19,6 +19,7 @@ from .const import (
 from .coordinator import WeatherRiskBridgeCoordinator
 from .frontend import async_register_frontend
 from .helpers import entry_slug_from_config, entry_title_from_config, merge_entry_config
+from .services import async_register_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    async_register_services(hass)
     await async_register_frontend(hass)
     return True
 

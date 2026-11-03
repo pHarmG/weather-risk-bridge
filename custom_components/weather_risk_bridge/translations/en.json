@@ -2,51 +2,83 @@
   "config": {
     "abort": {
       "already_configured": "This location is already configured.",
-      "reconfigure_successful": "Configuration updated."
+      "reconfigure_successful": "Configuration updated.",
+      "location_not_found": "No matching place was found. Try a different search."
     },
     "error": {
       "cannot_connect": "Failed to connect to the Weather Risk Suite service. On Home Assistant OS, use the discovered http://172.30.x.x:8099 app IP (or http://HOME_ASSISTANT_HOST_IP:8099). The weather-risk-bridge hostname often does not resolve.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "geocoding_failed": "The place search could not be completed. Check the internet connection or enter coordinates manually.",
+      "location_not_found": "No matching place was found. Try a more specific search (e.g. \"Austin, TX\")."
     },
     "step": {
       "user": {
         "title": "Weather Risk Suite",
-        "description": "Connect to the Weather Risk Suite service and set the US location to track.\n\nService URL: leave the auto-filled value when present (http://172.30.x.x:8099 on Home Assistant OS). That Supervisor app IP is correct. If the field is empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLatitude / Longitude: decimal degrees (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
+        "description": "Connect to the Weather Risk Suite service and set the US location to track.\n\nService URL: leave the auto-filled value when present (http://172.30.x.x:8099 on Home Assistant OS). That Supervisor app IP is correct. If the field is empty, try http://HOME_ASSISTANT_HOST_IP:8099. The hostname http://weather-risk-bridge:8099 often does not resolve and will fail with no app log lines.\n\nLocation: search a place name (e.g. \"Austin TX\") and pick a match, check \"Use my Home Assistant location\", or type decimal degrees manually (US west longitudes are negative).\n\nLabel: friendly name such as Home (becomes the entity slug).\n\nUS locations only (NWS/SPC).",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
           "label": "Location label",
           "latitude": "Latitude (decimal degrees)",
           "longitude": "Longitude (decimal degrees, west is negative)",
-          "wind_threshold_mph": "Strong-wind threshold (mph)"
+          "wind_threshold_mph": "Strong-wind threshold (mph)",
+          "location_query": "Search for a place (optional, e.g. Austin TX)",
+          "use_home_assistant_location": "Use my Home Assistant location"
+        }
+      },
+      "location_results": {
+        "title": "Choose a location",
+        "description": "Several places matched \"{query}\". Pick the one to track.",
+        "data": {
+          "location_choice": "Matching place"
         }
       },
       "reconfigure": {
         "title": "Reconfigure Weather Risk Suite",
-        "description": "Update the service connection and latitude/longitude. Keep a discovered http://172.30.x.x:8099 app IP when present.",
+        "description": "Update the service connection and location. Search a place name or use your Home Assistant location instead of typing coordinates. Keep a discovered http://172.30.x.x:8099 app IP when present.",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
           "label": "Location label",
           "latitude": "Latitude (decimal degrees)",
           "longitude": "Longitude (decimal degrees, west is negative)",
-          "wind_threshold_mph": "Strong-wind threshold (mph)"
+          "wind_threshold_mph": "Strong-wind threshold (mph)",
+          "location_query": "Search for a place (optional, e.g. Austin TX)",
+          "use_home_assistant_location": "Use my Home Assistant location"
         }
       }
     }
   },
   "options": {
+    "abort": {
+      "location_not_found": "No matching place was found. Try a different search."
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the Weather Risk Suite service. On Home Assistant OS, use the discovered http://172.30.x.x:8099 app IP (or http://HOME_ASSISTANT_HOST_IP:8099). The weather-risk-bridge hostname often does not resolve.",
+      "unknown": "Unexpected error.",
+      "geocoding_failed": "The place search could not be completed. Check the internet connection or enter coordinates manually.",
+      "location_not_found": "No matching place was found. Try a more specific search (e.g. \"Austin, TX\")."
+    },
     "step": {
       "init": {
         "title": "Weather Risk Suite options",
-        "description": "Update the service connection and latitude/longitude. Keep a discovered http://172.30.x.x:8099 app IP when present.",
+        "description": "Update the service connection and location. Search a place name or use your Home Assistant location instead of typing coordinates. Keep a discovered http://172.30.x.x:8099 app IP when present.",
         "data": {
           "service_url": "Service URL",
           "bearer_token": "Bearer token (optional)",
           "label": "Location label",
           "latitude": "Latitude (decimal degrees)",
           "longitude": "Longitude (decimal degrees, west is negative)",
-          "wind_threshold_mph": "Strong-wind threshold (mph)"
+          "wind_threshold_mph": "Strong-wind threshold (mph)",
+          "location_query": "Search for a place (optional, e.g. Austin TX)",
+          "use_home_assistant_location": "Use my Home Assistant location"
+        }
+      },
+      "location_results": {
+        "title": "Choose a location",
+        "description": "Several places matched \"{query}\". Pick the one to track.",
+        "data": {
+          "location_choice": "Matching place"
         }
       }
     }

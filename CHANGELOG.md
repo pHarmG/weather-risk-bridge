@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Locations are far friendlier to update. The config, options and reconfigure flows gain a **place search** (e.g. "Austin TX") that resolves raw coordinates for you - multiple matches show a picker - and a **Use my Home Assistant location** checkbox that copies the coordinates Home Assistant is configured with. Typing decimal degrees still works.
+- Two new services for smoother updates without opening a flow:
+  - `weather_risk_bridge.resolve_location` searches a place name and returns coordinate candidates (`locations` list with label, latitude, longitude).
+  - `weather_risk_bridge.update_location` applies new coordinates to an existing location - directly, from the Home Assistant location, or from a search query - validates them against the weather service first, reloads the location, and restores the previous configuration if the reload fails. Restricted to administrators.
+- The card's visual editor can now manage coordinates inline: a Coordinates panel under Location Setup shows the current values, offers a place search with a pick-a-match list, a one-click **Use Home Assistant location** copy, and an Update coordinates button that calls the new service.
+- Temperature chart label polish on the longer-period line views: actual-temperature labels now stay on one side of the curve (above it) instead of flipping below the line whenever feels-like runs higher, which read as a confusing zigzag. Feels-like labels keep their position on the dashed curve and hide only when the two curves converge enough to collide.
+- Fixed the longer-period temperature charts showing two feels-like labels at a single point in time where true and feels-like round to the same degree (e.g. both reading "68 degrees"). Points whose apparent temperature would display identically to the actual temperature now show a single value; genuinely different values still show both labels.
+- Removed dead location-manager code left in the card editor.
+
 ## 0.2.6
 
 - The hero's current temperature and feels-like no longer change with the selected range. They now always come from the hourly forecast; previously they used the first point of the selected range, which averages 3 hours at 48h and 6 hours at 5 days. Range still reflects the selected window.

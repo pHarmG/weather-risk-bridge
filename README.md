@@ -155,7 +155,9 @@ This is the step that points Weather Risk Suite at **your** place.
 
 ### How to find your latitude and longitude
 
-Use any of these:
+You rarely need to: the setup form has a **place search**. Type a place name (e.g. `Austin TX`) and pick a match - the coordinates fill in automatically. Several matches show a picker with the coordinates of each. Or check **Use my Home Assistant location** to copy the coordinates Home Assistant itself is configured with.
+
+Prefer raw numbers? Any of these still work:
 
 - **Home Assistant’s own location:** **Settings → System → General** shows the home latitude/longitude. The Weather Risk Suite form usually **pre-fills** those values — change them if this card should track a different place.
 - **Google Maps:** right-click your address → the first two numbers are latitude and longitude (copy both).
@@ -169,9 +171,46 @@ Tips:
 
 ### Reconfigure later
 
-**Settings → Devices & Services → Weather Risk Suite → Configure / Reconfigure** (or the integration options) to change coordinates, label, service URL, token, or wind threshold.
+**Settings → Devices & Services → Weather Risk Suite → Configure / Reconfigure** (or the integration options) to change coordinates, label, service URL, token, or wind threshold. The same place search and Home Assistant location helpers are available there.
 
-You can also set or update a location from the **card editor** → **Location setup** (same fields: label, latitude, longitude, service URL, token, wind threshold).
+You can also set or update a location from the **card editor** → **Location Setup**: it shows the current coordinates with a place search, a **Use Home Assistant location** copy button, and **Update coordinates** - no flow dialogs needed.
+
+### Update coordinates from automations and scripts
+
+Two services make scripted updates easy:
+
+- `weather_risk_bridge.resolve_location` - search a place name and get coordinate candidates back.
+
+  ```yaml
+  action: weather_risk_bridge.resolve_location
+  data:
+    query: Austin TX
+  # response_variable: matches  # list of {label, latitude, longitude, ...}
+  ```
+
+- `weather_risk_bridge.update_location` - apply new coordinates to an existing location (admin only). Coordinates are validated against the weather service first; if the location cannot reload with them, the previous configuration is restored.
+
+  ```yaml
+  # Direct coordinates
+  action: weather_risk_bridge.update_location
+  data:
+    location: home          # location key or label; optional when only one exists
+    latitude: 30.2672
+    longitude: -97.7431
+
+  # From a place-name search (first match)
+  action: weather_risk_bridge.update_location
+  data:
+    location: home
+    query: Austin TX
+    result: 1
+
+  # Adopt Home Assistant's own location
+  action: weather_risk_bridge.update_location
+  data:
+    location: home
+    use_home_assistant: true
+  ```
 
 ---
 

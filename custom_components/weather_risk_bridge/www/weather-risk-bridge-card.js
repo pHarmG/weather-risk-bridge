@@ -1487,6 +1487,12 @@ function buildFeelsLikeMarkers(series, model) {
     if (Math.abs(apparentValue - actualValue) < 0.01) {
       return [];
     }
+    // Suppress markers whose rounded display equals the actual temperature
+    // (e.g. 67.6 vs 68.1 both render "68°"): a second identical label at the
+    // same point in time reads as a duplicate value, not a feels-like delta.
+    if (Math.round(apparentValue) === Math.round(actualValue)) {
+      return [];
+    }
     const bar = model.bars[index];
     // Span the full bar like the storm caps; inset only by the round linecap
     // radius (stroke-width 4.5 / 2) so the cap ends sit on the bar edges.
@@ -4454,11 +4460,14 @@ function buildPanelLayoutModel(panel, config, selectedTooltipIndex, tooltipViewp
   }));
   const bars = svgModel.bars.map((bar) => {
     const marker = markerByIndex.get(bar.index);
-    const valueY = resolveBarValueLabelY(
-      chartStyle === "line" ? { ...bar, y: bar.lineY, valueY: bar.lineValueY } : bar,
-      marker,
-      svgModel.plotTop
-    );
+    // Line mode keeps actual-temperature labels on one side of the curve
+    // (above it): flipping them below whenever feels-like runs higher makes
+    // them zigzag across the line as feels-like crosses actual, which reads
+    // as visual noise rather than collision avoidance. Bars keep the
+    // collision-aware placement (labels ride the bar top).
+    const valueY = chartStyle === "line"
+      ? bar.lineValueY
+      : resolveBarValueLabelY(bar, marker, svgModel.plotTop);
     const isTemp = panel.isTemperature;
     const isPrecipitationPanel = panel.panelKey === "precipitation";
     const hasMeaningfulProbability = bar.value >= 0.5;
@@ -5376,7 +5385,6 @@ var DEFAULT_SERIES_COLUMNS = 2;
 var DEFAULT_CHART_STYLE = "line";
 var DEFAULT_LOW_RISK_BEHAVIOR = "icons";
 var DEFAULT_LOW_RISK_THRESHOLD = 5;
-var DEFAULT_WIND_THRESHOLD_MPH = 25;
 var nextCardInstanceId = 0;
 function resolvePrecipitationBarVisualMode(layout) {
   if (layout.panelKey !== "precipitation") return null;
@@ -5419,52 +5427,6 @@ var AMBIENT_IMAGE_URLS = {
 };
 function getAmbientSceneImageUrl(scene) {
   return AMBIENT_IMAGE_URLS[scene?.preset ?? "cloudy"];
-}
-function buildLocationFormState(defaults, location) {
-  return {
-    entry_id: location?.entry_id ?? "",
-    label: location?.label ?? defaults?.label ?? "",
-    latitude: typeof defaults?.latitude === "number" ? String(defaults.latitude) : "",
-    longitude: typeof defaults?.longitude === "number" ? String(defaults.longitude) : "",
-    service_url: defaults?.service_url ?? "",
-    bearer_token: "",
-    wind_threshold_mph: String(
-      defaults?.wind_threshold_mph ?? DEFAULT_WIND_THRESHOLD_MPH
-    )
-  };
-}
-function deriveLocationTitle(label, latitude, longitude) {
-  const trimmedLabel = label.trim();
-  if (trimmedLabel) {
-    return trimmedLabel;
-  }
-  return `${latitude.toFixed(4)},${longitude.toFixed(4)}`;
-}
-function flowDefaultsFromSchema(schema, fallback) {
-  const values = new Map((schema ?? []).map((field) => [field.name, field.default]));
-  return {
-    label: String(values.get("label") ?? fallback?.label ?? ""),
-    latitude: Number(values.get("latitude") ?? fallback?.latitude ?? 0),
-    longitude: Number(values.get("longitude") ?? fallback?.longitude ?? 0),
-    service_url: String(values.get("service_url") ?? fallback?.service_url ?? ""),
-    wind_threshold_mph: Number(
-      values.get("wind_threshold_mph") ?? fallback?.wind_threshold_mph ?? DEFAULT_WIND_THRESHOLD_MPH
-    )
-  };
-}
-function locationFormStateFromSchema(schema, fallback, entryId = "") {
-  const values = new Map((schema ?? []).map((field) => [field.name, field.default]));
-  return {
-    entry_id: entryId,
-    label: String(values.get("label") ?? fallback?.label ?? ""),
-    latitude: String(values.get("latitude") ?? fallback?.latitude ?? ""),
-    longitude: String(values.get("longitude") ?? fallback?.longitude ?? ""),
-    service_url: String(values.get("service_url") ?? fallback?.service_url ?? ""),
-    bearer_token: String(values.get("bearer_token") ?? ""),
-    wind_threshold_mph: String(
-      values.get("wind_threshold_mph") ?? fallback?.wind_threshold_mph ?? DEFAULT_WIND_THRESHOLD_MPH
-    )
-  };
 }
 function normalizeMaxAlerts(rawValue) {
   // The visual editor stores select values as strings ("3"); accept both.
@@ -9890,16 +9852,314 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
   constructor() {
     super(...arguments);
     this._config = stubConfig();
-    this._locationDefaults = null;
-    this._locationForm = buildLocationFormState();
-    this._locationRecords = [];
+    // Coordinate management for the selected location (integration >= 0.3.0
+    // exposes the resolve_location / update_location services).
+    this._coordinateDraft = { latitude: "", longitude: "" };
+    this._coordinateCandidates = [];
+    this._coordinateQuery = "";
+    this._coordinateSearching = false;
+    this._coordinateSaving = false;
+    this._coordinatesDirty = false;
+    this._lastDraftLocationKey = null;
     this._locationStatus = null;
-    this._loadingLocations = false;
-    this._savingLocation = false;
-    this._hasLoadedLocationManager = false;
   }
   setConfig(config) {
     this._config = normalizeCardConfig(config);
+  }
+  willUpdate(changedProperties) {
+    if (changedProperties.has("hass") || changedProperties.has("_config")) {
+      const selectedKey = normalizeLocationKey(this._config.location ?? "");
+      if (selectedKey !== this._lastDraftLocationKey) {
+        // Location identity changed (dropdown, key field, entity override):
+        // drop any unapplied draft so it cannot be applied to the new location.
+        this._lastDraftLocationKey = selectedKey;
+        this._coordinatesDirty = false;
+        this._coordinateCandidates = [];
+        this._locationStatus = null;
+        this._syncCoordinateDraft();
+      } else if (!this._coordinatesDirty) {
+        this._syncCoordinateDraft();
+      }
+    }
+  }
+  _syncCoordinateDraft() {
+    const coords = this._locationCoordinates();
+    this._coordinateDraft = {
+      latitude: coords ? String(coords.latitude) : "",
+      longitude: coords ? String(coords.longitude) : ""
+    };
+  }
+  _selectedLocationRecord() {
+    const selectedKey = normalizeLocationKey(this._config.location ?? "");
+    if (!selectedKey) return null;
+    return cardLocationOptions(this.hass?.states ?? {}).find((option) => option.key === selectedKey) ?? null;
+  }
+  _locationCoordinates() {
+    const record = this._selectedLocationRecord();
+    if (!record || !this.hass?.states) return null;
+    const sourceStatus = this.hass.states[record.entityId]?.attributes?.source_status;
+    const latitude = Number(sourceStatus?.latitude);
+    const longitude = Number(sourceStatus?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return { latitude, longitude };
+  }
+  _handleCoordinateInput(event, field) {
+    const target = event.currentTarget;
+    this._coordinateDraft = {
+      ...this._coordinateDraft,
+      [field]: target.value
+    };
+    this._coordinatesDirty = true;
+  }
+  _handleCoordinateQueryInput(event) {
+    const target = event.currentTarget;
+    this._coordinateQuery = target.value;
+  }
+  _handleUseHomeAssistantLocation() {
+    const latitude = Number(this.hass?.config?.latitude);
+    const longitude = Number(this.hass?.config?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      this._locationStatus = {
+        tone: "error",
+        message: "Home Assistant location is unavailable in this editor context."
+      };
+      return;
+    }
+    this._coordinateDraft = {
+      latitude: String(Math.round(latitude * 1e4) / 1e4),
+      longitude: String(Math.round(longitude * 1e4) / 1e4)
+    };
+    this._coordinatesDirty = true;
+    this._locationStatus = {
+      tone: "info",
+      message: "Home Assistant location copied. Choose Update coordinates to apply it."
+    };
+  }
+  async _handleCoordinateSearch() {
+    if (!this.hass?.callService || this._coordinateSearching) return;
+    const query = this._coordinateQuery.trim();
+    if (!query) {
+      this._locationStatus = { tone: "error", message: "Type a place to search for (e.g. Austin TX)." };
+      return;
+    }
+    this._coordinateSearching = true;
+    this._locationStatus = { tone: "info", message: `Searching for "${query}"...` };
+    try {
+      // hass.callService(domain, service, data, target?, notifyOnError?, returnResponse?):
+      // target and notifyOnError must be passed (undefined) to position the
+      // response flag, and the result arrives as a { response, context } envelope.
+      const envelope = await this.hass.callService(
+        "weather_risk_bridge",
+        "resolve_location",
+        { query },
+        void 0,
+        void 0,
+        true
+      );
+      const payload = envelope?.response ?? envelope ?? {};
+      const locations = Array.isArray(payload.locations) ? payload.locations : [];
+      if (locations.length === 0) {
+        this._coordinateCandidates = [];
+        this._locationStatus = { tone: "error", message: `No matches for "${query}". Try a more specific name.` };
+      } else {
+        this._coordinateCandidates = locations;
+        this._locationStatus = {
+          tone: "info",
+          message: `${locations.length} match${locations.length === 1 ? "" : "es"} for "${query}". Pick one to copy its coordinates.`
+        };
+      }
+    } catch (error) {
+      this._coordinateCandidates = [];
+      this._locationStatus = {
+        tone: "error",
+        message: this._serviceErrorText(error, "search for places")
+      };
+    } finally {
+      this._coordinateSearching = false;
+    }
+  }
+  _handlePickCoordinateCandidate(candidate) {
+    this._coordinateDraft = {
+      latitude: String(candidate.latitude),
+      longitude: String(candidate.longitude)
+    };
+    this._coordinatesDirty = true;
+    this._locationStatus = {
+      tone: "info",
+      message: `${candidate.label} copied (${candidate.latitude}, ${candidate.longitude}). Choose Update coordinates to apply it.`
+    };
+  }
+  async _handleApplyCoordinates() {
+    if (!this.hass?.callService || this._coordinateSaving) return;
+    const record = this._selectedLocationRecord();
+    const selectedKey = normalizeLocationKey(this._config.location ?? "");
+    if (!record || !selectedKey) {
+      this._locationStatus = {
+        tone: "error",
+        message: "Select a Weather Risk Suite location before updating coordinates."
+      };
+      return;
+    }
+    // Require both raw fields: Number("") is 0, which would silently persist
+    // the null island (0, 0) when a field is cleared.
+    if (!String(this._coordinateDraft.latitude).trim() || !String(this._coordinateDraft.longitude).trim()) {
+      this._locationStatus = { tone: "error", message: "Enter both latitude and longitude." };
+      return;
+    }
+    const latitude = Number(this._coordinateDraft.latitude);
+    const longitude = Number(this._coordinateDraft.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      this._locationStatus = { tone: "error", message: "Latitude must be a number between -90 and 90." };
+      return;
+    }
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      this._locationStatus = { tone: "error", message: "Longitude must be a number between -180 and 180." };
+      return;
+    }
+    this._coordinateSaving = true;
+    this._locationStatus = { tone: "info", message: `Updating coordinates for ${record.label}...` };
+    try {
+      const envelope = await this.hass.callService(
+        "weather_risk_bridge",
+        "update_location",
+        { location: selectedKey, latitude, longitude },
+        void 0,
+        void 0,
+        true
+      );
+      // The user may have switched locations while the reload was pending:
+      // drop the result rather than writing it into the other location's editor.
+      if (normalizeLocationKey(this._config.location ?? "") !== selectedKey) {
+        return;
+      }
+      const payload = envelope?.response ?? envelope ?? {};
+      const updatedLatitude = Number(payload.latitude ?? latitude);
+      const updatedLongitude = Number(payload.longitude ?? longitude);
+      const appliedKey = normalizeLocationKey(payload.location ?? selectedKey);
+      if (appliedKey) {
+        this._lastDraftLocationKey = appliedKey;
+      }
+      this._coordinateDraft = {
+        latitude: String(updatedLatitude),
+        longitude: String(updatedLongitude)
+      };
+      this._coordinatesDirty = false;
+      this._coordinateCandidates = [];
+      this._locationStatus = {
+        tone: "success",
+        message: `Coordinates for ${payload.title ?? record.label} updated to ${updatedLatitude}, ${updatedLongitude}. Chart data refreshes on the next update cycle.`
+      };
+    } catch (error) {
+      this._locationStatus = {
+        tone: "error",
+        message: this._serviceErrorText(error, "update coordinates")
+      };
+    } finally {
+      this._coordinateSaving = false;
+    }
+  }
+  _serviceErrorText(error, action) {
+    const detail = error instanceof Error ? error.message : String(error ?? "");
+    if (/not found|unknown service|Service.*not/i.test(detail)) {
+      return `Could not ${action}: update the Weather Risk Suite integration to 0.3.0 or newer.`;
+    }
+    return detail || `Could not ${action}.`;
+  }
+  _renderCoordinateTools(config) {
+    const record = this._selectedLocationRecord();
+    if (!record) return A;
+    const draft = this._coordinateDraft;
+    const hasCoordinates = draft.latitude !== "" || draft.longitude !== "";
+    return b2`
+      <div class="field">
+        <label>Coordinates for ${record.label}</label>
+        <div class="help">
+          ${hasCoordinates
+      ? `Currently ${draft.latitude}, ${draft.longitude}. Search a place, copy the Home Assistant location, or edit the numbers, then update.`
+      : "Coordinates appear once this location reports data; you can still set them below."}
+        </div>
+        <div class="field-grid">
+          <input
+            id="coordinate_latitude"
+            type="number"
+            step="0.0001"
+            min="-90"
+            max="90"
+            placeholder="Latitude"
+            .value=${draft.latitude}
+            @input=${(event) => this._handleCoordinateInput(event, "latitude")}
+          />
+          <input
+            id="coordinate_longitude"
+            type="number"
+            step="0.0001"
+            min="-180"
+            max="180"
+            placeholder="Longitude"
+            .value=${draft.longitude}
+            @input=${(event) => this._handleCoordinateInput(event, "longitude")}
+          />
+        </div>
+        <div class="actions">
+          <button
+            type="button"
+            @click=${() => this._handleUseHomeAssistantLocation()}
+          >
+            Use Home Assistant location
+          </button>
+          <button
+            type="button"
+            ?disabled=${this._coordinateSaving || !hasCoordinates}
+            @click=${() => this._handleApplyCoordinates()}
+          >
+            ${this._coordinateSaving ? "Updating…" : "Update coordinates"}
+          </button>
+        </div>
+        <div class="field-grid">
+          <input
+            id="coordinate_query"
+            type="text"
+            placeholder="Search a place (e.g. Austin TX)"
+            .value=${this._coordinateQuery}
+            @input=${this._handleCoordinateQueryInput}
+            @keydown=${(event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this._handleCoordinateSearch();
+      }
+    }}
+          />
+          <button
+            type="button"
+            ?disabled=${this._coordinateSearching}
+            @click=${() => this._handleCoordinateSearch()}
+          >
+            ${this._coordinateSearching ? "Searching…" : "Search"}
+          </button>
+        </div>
+        ${this._coordinateCandidates.length > 0 ? b2`
+              <div class="candidates">
+                ${this._coordinateCandidates.map(
+      (candidate, index) => b2`
+                    <button
+                      type="button"
+                      class="candidate"
+                      @click=${() => this._handlePickCoordinateCandidate(candidate)}
+                    >
+                      <span class="candidate-label">${candidate.label || `Match ${index + 1}`}</span>
+                      <span class="candidate-coords">${candidate.latitude}, ${candidate.longitude}</span>
+                    </button>
+                  `
+    )}
+              </div>
+            ` : A}
+        ${this._locationStatus ? b2`
+              <div class="status" data-tone=${this._locationStatus.tone}>
+                ${this._locationStatus.message}
+              </div>
+            ` : A}
+      </div>
+    `;
   }
   render() {
     try {
@@ -9928,6 +10188,8 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
                 Picks from the Weather Risk Suite entities Home Assistant already knows about.
               </div>
             </div>
+
+            ${this._renderCoordinateTools(config)}
 
             <div class="field">
               <label for="location">Location key</label>
@@ -10199,195 +10461,11 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
       `;
     }
   }
-  _selectedManagedLocation() {
-    const locationKey = normalizeLocationKey(this._config.location ?? "");
-    return this._locationRecords.find((location) => location.slug === locationKey) ?? null;
-  }
   _applyLocationConfig(locationKey) {
     this._updateConfig({
       location: locationKey,
       entity: locationKey ? chartEntityIdForLocation(locationKey, DEFAULT_RANGE) : ""
     });
-  }
-  async _startCreateLocationFlow() {
-    if (!this.hass?.callApi) {
-      throw new Error("Home Assistant admin API is unavailable in this editor context.");
-    }
-    return await this.hass.callApi("POST", "config/config_entries/flow", {
-      handler: "weather_risk_bridge"
-    });
-  }
-  async _startExistingLocationOptionsFlow(entryId) {
-    if (!this.hass?.callApi) {
-      throw new Error("Home Assistant admin API is unavailable in this editor context.");
-    }
-    return await this.hass.callApi(
-      "POST",
-      "config/config_entries/options/flow",
-      {
-        handler: entryId
-      }
-    );
-  }
-  async _loadExistingLocationForm(location) {
-    if (!this.hass?.callApi) {
-      return;
-    }
-    try {
-      const flow = await this._startExistingLocationOptionsFlow(location.entry_id);
-      this._locationDefaults = flowDefaultsFromSchema(flow.data_schema, this._locationDefaults);
-      this._locationForm = locationFormStateFromSchema(
-        flow.data_schema,
-        this._locationDefaults,
-        location.entry_id
-      );
-    } catch (error) {
-      this._locationStatus = {
-        tone: "error",
-        message: error instanceof Error ? error.message : "Failed to load the selected Weather Risk Suite location."
-      };
-    }
-  }
-  async _loadManagedLocations(options = {}) {
-    if (!this.hass?.callApi || this._loadingLocations) {
-      return;
-    }
-    this._loadingLocations = true;
-    try {
-      const fallbackLocationOptions = cardLocationOptions(this.hass?.states ?? {});
-      const fallbackSlugByTitle = new Map(
-        fallbackLocationOptions.map((location) => [location.label.toLowerCase(), location.key])
-      );
-      const entries = await this.hass.callApi(
-        "GET",
-        "config/config_entries/entry"
-      );
-      const initFlow = await this._startCreateLocationFlow();
-      const defaults = flowDefaultsFromSchema(initFlow.data_schema, {
-        label: "",
-        latitude: this.hass.config?.latitude ?? 0,
-        longitude: this.hass.config?.longitude ?? 0,
-        service_url: "",
-        wind_threshold_mph: DEFAULT_WIND_THRESHOLD_MPH
-      });
-      const locations = entries.filter((entry) => entry.domain === "weather_risk_bridge").map((entry) => {
-        const slug = fallbackSlugByTitle.get(entry.title.toLowerCase()) ?? normalizeLocationKey(entry.title);
-        return {
-          entry_id: entry.entry_id,
-          slug,
-          title: entry.title,
-          label: entry.title,
-          state: entry.state,
-          supports_reconfigure: entry.supports_reconfigure
-        };
-      }).sort((left, right) => left.title.localeCompare(right.title));
-      this._locationDefaults = defaults;
-      this._locationRecords = locations;
-      const selectedSlug = normalizeLocationKey(
-        options.selectedSlug ?? this._config.location ?? ""
-      );
-      const selectedLocation = locations.find((location) => location.slug === selectedSlug) ?? null;
-      if (!options.preserveForm || !this._hasLoadedLocationManager) {
-        this._locationForm = buildLocationFormState(defaults, selectedLocation);
-      }
-      this._hasLoadedLocationManager = true;
-      this._locationStatus = options.status ?? null;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to load Weather Risk Suite locations.";
-      this._locationStatus = {
-        tone: "error",
-        message
-      };
-    } finally {
-      this._loadingLocations = false;
-    }
-  }
-  _handleLocationFormInput(event, field) {
-    const target = event.currentTarget;
-    this._locationForm = {
-      ...this._locationForm,
-      [field]: target.value
-    };
-  }
-  async _handleSaveLocation() {
-    if (!this.hass?.callApi) {
-      this._locationStatus = {
-        tone: "error",
-        message: "Home Assistant admin API is unavailable in this editor context."
-      };
-      return;
-    }
-    if (!this._locationForm.label.trim()) {
-      this._locationStatus = {
-        tone: "error",
-        message: "Location label is required."
-      };
-      return;
-    }
-    const latitude = Number(this._locationForm.latitude);
-    const longitude = Number(this._locationForm.longitude);
-    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      this._locationStatus = {
-        tone: "error",
-        message: "Latitude and longitude must be valid numbers."
-      };
-      return;
-    }
-    this._savingLocation = true;
-    this._locationStatus = {
-      tone: "info",
-      message: "Saving Weather Risk Suite location..."
-    };
-    try {
-      const isExistingLocation = Boolean(this._locationForm.entry_id);
-      const initFlow = isExistingLocation ? await this._startExistingLocationOptionsFlow(this._locationForm.entry_id) : await this._startCreateLocationFlow();
-      const flowPath = isExistingLocation ? `config/config_entries/options/flow/${initFlow.flow_id}` : `config/config_entries/flow/${initFlow.flow_id}`;
-      const response = await this.hass.callApi("POST", flowPath, {
-        service_url: this._locationForm.service_url,
-        bearer_token: this._locationForm.bearer_token,
-        label: this._locationForm.label,
-        latitude,
-        longitude,
-        wind_threshold_mph: Number(this._locationForm.wind_threshold_mph)
-      });
-      if (response.type === "form") {
-        const errorKey = response.errors?.base;
-        this._locationStatus = {
-          tone: "error",
-          message: errorKey === "cannot_connect" ? "Weather Risk Suite could not connect to the configured service URL." : "Home Assistant rejected the Weather Risk Suite location settings."
-        };
-        this._locationDefaults = flowDefaultsFromSchema(response.data_schema, this._locationDefaults);
-        this._locationForm = {
-          ...this._locationForm,
-          service_url: this._locationForm.service_url,
-          bearer_token: this._locationForm.bearer_token,
-          label: this._locationForm.label,
-          latitude: String(latitude),
-          longitude: String(longitude),
-          wind_threshold_mph: this._locationForm.wind_threshold_mph
-        };
-        return;
-      }
-      const expectedTitle = deriveLocationTitle(this._locationForm.label, latitude, longitude);
-      const expectedSlug = normalizeLocationKey(expectedTitle);
-      this._applyLocationConfig(expectedSlug);
-      await this._loadManagedLocations({
-        selectedSlug: expectedSlug,
-        preserveForm: false,
-        status: {
-          tone: "success",
-          message: isExistingLocation ? `Updated Weather Risk Suite location "${expectedTitle}".` : `Created Weather Risk Suite location "${expectedTitle}".`
-        }
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save Weather Risk Suite location.";
-      this._locationStatus = {
-        tone: "error",
-        message
-      };
-    } finally {
-      this._savingLocation = false;
-    }
   }
   _handleLocationSelect(event) {
     const target = event.currentTarget;
@@ -10397,6 +10475,7 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
       location,
       entity: detectedLocation?.entityId ?? (location ? chartEntityIdForLocation(location, DEFAULT_RANGE) : this._config.entity)
     });
+    // Draft reset for the location change happens in willUpdate.
   }
   _handleLocationInput(event) {
     const target = event.currentTarget;
@@ -10489,12 +10568,12 @@ var WeatherRiskBridgeCardEditor = class extends i4 {
 WeatherRiskBridgeCardEditor.properties = {
   hass: { attribute: false },
   _config: { state: true },
-  _locationDefaults: { state: true },
-  _locationForm: { state: true },
-  _locationRecords: { state: true },
-  _locationStatus: { state: true },
-  _loadingLocations: { state: true },
-  _savingLocation: { state: true }
+  _coordinateDraft: { state: true },
+  _coordinateCandidates: { state: true },
+  _coordinateQuery: { state: true },
+  _coordinateSearching: { state: true },
+  _coordinateSaving: { state: true },
+  _locationStatus: { state: true }
 };
 WeatherRiskBridgeCardEditor.styles = i`
     :host {
@@ -10592,6 +10671,30 @@ WeatherRiskBridgeCardEditor.styles = i`
       display: grid;
       gap: 16px;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+
+    .candidates {
+      display: grid;
+      gap: 8px;
+    }
+
+    .candidate {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .candidate-label {
+      font-weight: 600;
+    }
+
+    .candidate-coords {
+      font-variant-numeric: tabular-nums;
+      color: var(--secondary-text-color);
+      white-space: nowrap;
     }
 
     .actions {

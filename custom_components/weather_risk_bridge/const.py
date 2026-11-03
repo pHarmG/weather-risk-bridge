@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 DOMAIN = "weather_risk_bridge"
-VERSION = "0.2.6"
+VERSION = "0.3.0"
 PLATFORMS = ["sensor", "weather"]
 
 CONF_SERVICE_URL = "service_url"
@@ -13,6 +13,18 @@ CONF_LABEL = "label"
 CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
 CONF_WIND_THRESHOLD_MPH = "wind_threshold_mph"
+# Stable lookup alias for entries whose slug changes when coordinates change
+# (entries without a label derive their slug from the coordinates).
+CONF_LOCATION_KEY = "location_key"
+# Transient config-flow helpers (never persisted in entry data).
+CONF_LOCATION_QUERY = "location_query"
+CONF_USE_HOME_ASSISTANT_LOCATION = "use_home_assistant_location"
+CONF_LOCATION_CHOICE = "location_choice"
+
+SERVICE_RESOLVE_LOCATION = "resolve_location"
+SERVICE_UPDATE_LOCATION = "update_location"
+
+ATTR_LOCATIONS = "locations"
 
 # Fallback only when Supervisor discovery cannot find a local app.
 # On HAOS the config flow prefers http://<app-container-ip>:8099 from discovery.
